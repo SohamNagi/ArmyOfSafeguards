@@ -64,12 +64,3 @@ naming:
   - test_<task>.py for corresponding unit tests.
   - aggregator.py for the unified system script.
 
-evaluation:
-  - Each critic evaluated using Accuracy and F1-score.
-  - Benchmark datasets: TruthfulQA, FEVER, SciFact, VitaminC, Climate-FEVER, x_sensitive, ToxiGen, JailbreakBench.
-
-phase:
-  - Phase 1 = Individual critics + aggregator integration
-  - Phase 2 = Cross-benchmark evaluation + LoRA adaptation
-  - Phase 3 = Deployment as API service (optional)
-
