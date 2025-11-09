@@ -1,5 +1,5 @@
-echo "transformers>=4.44
+transformers>=4.44
 torch
 scikit-learn
 evaluate
-datasets==3.6.0" > requirements.txt
+datasets==3.6.0
