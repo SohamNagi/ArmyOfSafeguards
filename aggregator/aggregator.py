@@ -37,9 +37,12 @@ def run_all_safeguards(text: str) -> Dict[str, Any]:
     
     # from sexual.safeguard_sexual import predict as sex_check
     # results['sexual'] = sex_check(text)
-    
-    # from jailbreak.safeguard_jailbreak import predict as jailbreak_check
-    # results['jailbreak'] = jailbreak_check(text)
+
+    try:
+        from jailbreak.safeguard_jailbreak import predict as jailbreak_check
+        results['jailbreak'] = jailbreak_check(text)
+    except ImportError:
+        results['jailbreak'] = {"error": "Jailbreak safeguard not available"}
     
     return results
 
