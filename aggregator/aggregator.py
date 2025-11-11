@@ -35,8 +35,12 @@ def run_all_safeguards(text: str) -> Dict[str, Any]:
     # from toxicity.safeguard_toxicity import predict as toxic_check
     # results['toxicity'] = toxic_check(text)
     
-    # from sexual.safeguard_sexual import predict as sex_check
-    # results['sexual'] = sex_check(text)
+    # Import and run sexual content safeguard
+    try:
+        from sexual.safeguard_sexual import predict as sex_check
+        results['sexual'] = sex_check(text)
+    except ImportError:
+        results['sexual'] = {"error": "Sexual content safeguard not available"}
 
     try:
         from jailbreak.safeguard_jailbreak import predict as jailbreak_check
@@ -70,12 +74,19 @@ def aggregate_results(results: Dict[str, Dict[str, Any]], threshold: float = 0.7
         
         # Check if this safeguard flagged the content
         # For factuality: LABEL_1 = non-factual (unsafe), LABEL_0 = factual (safe)
-        # For other safeguards, adjust logic as needed
+        # For sexual: LABEL_1 = sensitive/sexual content (unsafe), LABEL_0 = safe
+        # For jailbreak: label is boolean (True = jailbreak/unsafe, False = safe)
         is_problematic = False
         
         if safeguard_name == 'factuality':
             # LABEL_1 means non-factual/misinformation
             is_problematic = (label == 'LABEL_1' and confidence >= threshold)
+        elif safeguard_name == 'sexual':
+            # LABEL_1 means sensitive/sexual content
+            is_problematic = (label == 'LABEL_1' and confidence >= threshold)
+        elif safeguard_name == 'jailbreak':
+            # Boolean label: True = jailbreak (unsafe)
+            is_problematic = (label is True and confidence >= threshold)
         else:
             # For other safeguards, assume higher label numbers = problematic
             # Adjust this logic when adding new safeguards
