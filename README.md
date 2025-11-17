@@ -32,6 +32,11 @@ ArmyOfSafeguards/
 │       ├── quick_test.py
 │       └── evaluate_sexual.py
 ├── jailbreak/               # Jailbreak attempt detection
+│   ├── safeguard_jailbreak.py
+│   ├── README.md
+│   └── tests/               # Jailbreak content-specific tests
+│       ├── quick_test.py
+│       └── benchmark_jailbreak_jbb.py
 ├── aggregator/              # Unified interface for all safeguards
 │   ├── aggregator.py
 │   └── README.md
@@ -110,7 +115,7 @@ python aggregator/aggregator.py "Your text to evaluate here"
 #### Jailbreak Safeguard (Tommy)
 - **Model**: `tommypang04/finetuned-model-jailbrak`
 - **Purpose**: Detects jailbreak attempts in prompts
-- **Documentation**: [jailbreak/safeguard_jailbreak.py](jailbreak/safeguard_jailbreak.py)
+- **Documentation**: [jailbreak/README.md](jailbreak/README.md)
 
 ### 🚧 In Development
 - Additional evaluation datasets and metrics
@@ -195,6 +200,8 @@ python toxicity/tests/evaluate_toxicity.py --limit 100
 
 # Jailbreak tests
 python jailbreak/safeguard_jailbreak.py "Test prompt"
+python jailbreak/tests/quick_test.py
+python jailbreak/tests/benchmark_jailbreak.jbb.py
 ```
 
 ### Evaluation Results
@@ -238,13 +245,29 @@ python jailbreak/safeguard_jailbreak.py "Test prompt"
 | Recall | 69.23% |
 | F1-Score | 72.00% |
 
-### Benchmark Datasets
+**Jailbreak Safeguard Performance**:
+
+⚠️ **Note**: Model trained on TrustAIRLab/in-the-wild-jailbreak-prompts dataset.
+
+**ToxiGen Test Set**:
+| Metric | Score |
+|--------|-------|
+| Accuracy | 94.8248% |
+| F1-Score | 65.7143% |
+
+### Individual Safeguard Benchmark Datasets
 
 - **Factuality**: TruthfulQA, FEVER, SciFact, VitaminC, Climate-FEVER
 - **Sexual Content**: CardiffNLP x_sensitive
 - **Toxicity**: ToxiGen, hate_speech18, civil_comments
+- **Jailbreak**: JBB-Behaviors
 
 See individual safeguard test directories for evaluation scripts.
+
+### Safeguard System Benchmark Datasets
+- **Jailbreak & harmful-content robustness**: [HarmBench](https://huggingface.co/datasets/walledai/HarmBench), [JailbreakBench](https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors)
+- **Moderation / guardrail benchmarks**: [WildGuardMix](https://huggingface.co/datasets/allenai/wildguardmix)
+- **Broader safety suites**: [HELM Safety](https://crfm.stanford.edu/helm/safety/latest/), have to check if it's opensource
 
 ## 🤝 Contributing
 
