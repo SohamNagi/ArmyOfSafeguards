@@ -22,18 +22,39 @@ The pipeline supports the following public benchmarks:
    - Moderation / guardrail benchmark
    - Tests content moderation capabilities
 
+## Authentication
+
+Some benchmarks (like HarmBench) are **gated datasets** that require HuggingFace authentication:
+
+1. **Get a HuggingFace token**:
+   - Go to https://huggingface.co/settings/tokens
+   - Create a new token with "read" permissions
+
+2. **Accept dataset terms**:
+   - Visit the dataset page (e.g., https://huggingface.co/datasets/walledai/HarmBench)
+   - Accept the terms of use
+
+3. **Authenticate** (choose one method):
+   - **Command line**:** `python benchmark/run_benchmark.py --benchmark HarmBench --hf-token YOUR_TOKEN`
+   - **Environment variable**: `export HF_TOKEN=YOUR_TOKEN` (Linux/Mac) or `set HF_TOKEN=YOUR_TOKEN` (Windows)
+   - **Interactive**: The script will prompt you to login if no token is found
+
 ## Usage
 
 ### Run a Single Benchmark
 
 ```bash
-# Run HarmBench with 100 examples
+# Run HarmBench with 100 examples (requires authentication)
+python benchmark/run_benchmark.py --benchmark HarmBench --limit 100 --hf-token YOUR_TOKEN
+
+# Or use environment variable
+export HF_TOKEN=YOUR_TOKEN
 python benchmark/run_benchmark.py --benchmark HarmBench --limit 100
 
-# Run JailbreakBench with custom threshold
+# Run JailbreakBench with custom threshold (no auth needed)
 python benchmark/run_benchmark.py --benchmark JailbreakBench --threshold 0.8
 
-# Run WildGuardMix with all examples
+# Run WildGuardMix with all examples (no auth needed)
 python benchmark/run_benchmark.py --benchmark WildGuardMix
 ```
 
@@ -53,6 +74,7 @@ python benchmark/run_benchmark.py --all --threshold 0.75
 - `--all`: Run all available benchmarks
 - `--limit`: Maximum number of examples per benchmark (default: all)
 - `--threshold`: Confidence threshold for flagging (default: 0.7)
+- `--hf-token`: HuggingFace token for accessing gated datasets (or set `HF_TOKEN` env var)
 - `--no-save`: Don't save results to JSON file
 
 ## Output
@@ -169,11 +191,19 @@ To add a new benchmark:
 
 If you encounter issues loading a dataset:
 
-1. **Field Name Mismatches**: The pipeline tries to match field names case-insensitively. If a dataset uses different field names, update the `BENCHMARKS` configuration in `run_benchmark.py`.
+1. **Authentication Errors (Gated Datasets)**:
+   - **Error**: "Dataset is a gated dataset on the Hub. You must be authenticated to access it."
+   - **Solution**: 
+     - Get a token from https://huggingface.co/settings/tokens
+     - Accept the dataset terms at the dataset's HuggingFace page
+     - Use `--hf-token YOUR_TOKEN` or set `HF_TOKEN` environment variable
+     - Example: `export HF_TOKEN=YOUR_TOKEN` (Linux/Mac) or `set HF_TOKEN=YOUR_TOKEN` (Windows)
 
-2. **Dataset Structure Changes**: Some datasets may have different structures. Check the HuggingFace dataset page for the correct field names and update the configuration accordingly.
+2. **Field Name Mismatches**: The pipeline tries to match field names case-insensitively. If a dataset uses different field names, update the `BENCHMARKS` configuration in `run_benchmark.py`.
 
-3. **Missing Labels**: If a dataset doesn't have labels in the expected format, the pipeline will skip those examples and show a warning.
+3. **Dataset Structure Changes**: Some datasets may have different structures. Check the HuggingFace dataset page for the correct field names and update the configuration accordingly.
 
-4. **Memory Issues**: For very large datasets, use `--limit` to restrict the number of examples evaluated.
+4. **Missing Labels**: If a dataset doesn't have labels in the expected format, the pipeline will skip those examples and show a warning.
+
+5. **Memory Issues**: For very large datasets, use `--limit` to restrict the number of examples evaluated.
 

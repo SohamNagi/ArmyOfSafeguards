@@ -9,11 +9,27 @@ Usage:
     python benchmark/run_benchmark.py --benchmark WildGuardMix --limit 500
     python benchmark/run_benchmark.py --benchmark JailbreakBench --limit 200
     python benchmark/run_benchmark.py --all --limit 100
+
+For Gated Datasets, you need to authenticate with HuggingFace.
+# Method 1: Command line argument
+python benchmark/run_benchmark.py --benchmark HarmBench --hf-token YOUR_TOKEN
+
+# Method 2: Environment variable (Linux/Mac)
+export HF_TOKEN=YOUR_TOKEN
+python benchmark/run_benchmark.py --benchmark HarmBench
+
+# Method 3: Environment variable (Windows)
+set HF_TOKEN=YOUR_TOKEN
+python benchmark/run_benchmark.py --benchmark HarmBench
+
+# Method 4: Interactive (will prompt if no token found)
+python benchmark/run_benchmark.py --benchmark HarmBench
 """
 
 import sys
 import json
 import argparse
+import os
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple
 from datetime import datetime
@@ -33,6 +49,13 @@ from sklearn.metrics import (
 # Import aggregator
 from aggregator.aggregator import evaluate_text
 
+# HuggingFace authentication
+try:
+    from huggingface_hub import login, whoami
+    HF_AUTH_AVAILABLE = True
+except ImportError:
+    HF_AUTH_AVAILABLE = False
+
 
 # Benchmark dataset configurations
 BENCHMARKS = {
@@ -48,7 +71,8 @@ BENCHMARKS = {
             True: "unsafe",
             False: "safe"
         },
-        "note": "Jailbreak & harmful-content robustness benchmark"
+        "note": "Jailbreak & harmful-content robustness benchmark",
+        "requires_auth": True  # This is a gated dataset
     },
     "JailbreakBench": {
         "hf_id": "JailbreakBench/JBB-Behaviors",
@@ -60,7 +84,8 @@ BENCHMARKS = {
             "harmful": "unsafe",
             "benign": "safe"
         },
-        "note": "Jailbreak attempt detection benchmark"
+        "note": "Jailbreak attempt detection benchmark",
+        "requires_auth": False
     },
     "WildGuardMix": {
         "hf_id": "allenai/wildguardmix",
@@ -72,18 +97,77 @@ BENCHMARKS = {
             True: "safe",
             False: "unsafe"
         },
-        "note": "Moderation / guardrail benchmark"
+        "note": "Moderation / guardrail benchmark",
+        "requires_auth": False
     }
 }
 
 
-def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+def check_hf_authentication() -> bool:
+    """
+    Check if user is authenticated with HuggingFace.
+    
+    Returns:
+        True if authenticated, False otherwise
+    """
+    if not HF_AUTH_AVAILABLE:
+        return False
+    
+    try:
+        user_info = whoami()
+        return user_info is not None
+    except Exception:
+        return False
+
+
+def authenticate_hf(token: Optional[str] = None) -> bool:
+    """
+    Authenticate with HuggingFace Hub.
+    
+    Args:
+        token: HuggingFace token (if None, will try to use existing token or prompt)
+        
+    Returns:
+        True if authentication successful, False otherwise
+    """
+    if not HF_AUTH_AVAILABLE:
+        print("⚠️  huggingface_hub not available. Install it with: pip install huggingface_hub")
+        return False
+    
+    try:
+        if token:
+            # Use provided token
+            login(token=token)
+        else:
+            # Check if token is in environment
+            hf_token = os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
+            if hf_token:
+                login(token=hf_token)
+            else:
+                # Try interactive login
+                print("Attempting to authenticate with HuggingFace Hub...")
+                login()
+        
+        # Verify authentication
+        if check_hf_authentication():
+            print("✅ Successfully authenticated with HuggingFace Hub")
+            return True
+        else:
+            print("⚠️  Authentication verification failed")
+            return False
+    except Exception as e:
+        print(f"⚠️  Authentication error: {e}")
+        return False
+
+
+def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_token: Optional[str] = None) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
     """
     Load a benchmark dataset and extract texts and labels.
     
     Args:
         benchmark_name: Name of the benchmark
         limit: Maximum number of examples to load
+        hf_token: Optional HuggingFace token for gated datasets
         
     Returns:
         Tuple of (texts, labels, metadata)
@@ -95,6 +179,35 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None) -> 
     text_field = config["text_field"]
     label_field = config.get("label_field")
     label_mapping = config.get("label_mapping", {})
+    requires_auth = config.get("requires_auth", False)
+    
+    # Check authentication for gated datasets
+    if requires_auth:
+        if not check_hf_authentication():
+            # Try to authenticate
+            auth_success = False
+            if hf_token:
+                auth_success = authenticate_hf(hf_token)
+            else:
+                # Try to authenticate with existing token or prompt
+                auth_success = authenticate_hf()
+            
+            if not auth_success:
+                raise ValueError(
+                    f"\n{'='*70}\n"
+                    f"Authentication required for {benchmark_name}\n"
+                    f"{'='*70}\n"
+                    f"This is a gated dataset that requires HuggingFace authentication.\n\n"
+                    f"Steps to authenticate:\n"
+                    f"1. Get a token from: https://huggingface.co/settings/tokens\n"
+                    f"2. Accept the dataset terms at: https://huggingface.co/datasets/{hf_id}\n"
+                    f"3. Run with token:\n"
+                    f"   python benchmark/run_benchmark.py --benchmark {benchmark_name} --hf-token YOUR_TOKEN\n"
+                    f"   Or set environment variable:\n"
+                    f"   export HF_TOKEN=YOUR_TOKEN  # Linux/Mac\n"
+                    f"   set HF_TOKEN=YOUR_TOKEN      # Windows\n"
+                    f"{'='*70}"
+                )
     
     texts = []
     labels = []
@@ -219,17 +332,38 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None) -> 
         return texts, labels, metadata
         
     except Exception as e:
-        print(f"Error loading {benchmark_name}: {e}")
-        import traceback
-        traceback.print_exc()
-        raise
+        error_msg = str(e)
+        # Check if it's an authentication error
+        if "gated dataset" in error_msg.lower() or "must be authenticated" in error_msg.lower():
+            raise ValueError(
+                f"\n{'='*70}\n"
+                f"Authentication Error for {benchmark_name}\n"
+                f"{'='*70}\n"
+                f"This is a gated dataset that requires HuggingFace authentication.\n\n"
+                f"Steps to authenticate:\n"
+                f"1. Get a token from: https://huggingface.co/settings/tokens\n"
+                f"2. Accept the dataset terms at: https://huggingface.co/datasets/{hf_id}\n"
+                f"3. Run with token:\n"
+                f"   python benchmark/run_benchmark.py --benchmark {benchmark_name} --hf-token YOUR_TOKEN\n"
+                f"   Or set environment variable:\n"
+                f"   export HF_TOKEN=YOUR_TOKEN  # Linux/Mac\n"
+                f"   set HF_TOKEN=YOUR_TOKEN      # Windows\n"
+                f"{'='*70}\n"
+                f"Original error: {error_msg}"
+            )
+        else:
+            print(f"Error loading {benchmark_name}: {e}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 def evaluate_on_benchmark(
     benchmark_name: str,
     limit: Optional[int] = None,
     threshold: float = 0.7,
-    verbose: bool = True
+    verbose: bool = True,
+    hf_token: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Evaluate the safeguarding system on a benchmark dataset.
@@ -253,7 +387,7 @@ def evaluate_on_benchmark(
         # Load dataset
         if verbose:
             print("Loading dataset...")
-        texts, ground_truth_labels, metadata = load_benchmark_dataset(benchmark_name, limit)
+        texts, ground_truth_labels, metadata = load_benchmark_dataset(benchmark_name, limit, hf_token)
         
         if len(texts) == 0:
             return {
@@ -395,7 +529,8 @@ def evaluate_on_benchmark(
 def run_all_benchmarks(
     limit: Optional[int] = None,
     threshold: float = 0.7,
-    save_results: bool = True
+    save_results: bool = True,
+    hf_token: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     """
     Run evaluation on all available benchmarks.
@@ -424,7 +559,8 @@ def run_all_benchmarks(
             benchmark_name,
             limit=limit,
             threshold=threshold,
-            verbose=True
+            verbose=True,
+            hf_token=hf_token
         )
         all_results.append(result)
     
@@ -533,8 +669,17 @@ Examples:
         action="store_true",
         help="Don't save results to JSON file"
     )
+    parser.add_argument(
+        "--hf-token",
+        type=str,
+        default=None,
+        help="HuggingFace token for accessing gated datasets (or set HF_TOKEN env var)"
+    )
     
     args = parser.parse_args()
+    
+    # Use token from command line or environment
+    hf_token = args.hf_token or os.environ.get("HF_TOKEN") or os.environ.get("HUGGINGFACE_TOKEN")
     
     if not args.benchmark and not args.all:
         parser.error("Must specify either --benchmark or --all")
@@ -548,7 +693,8 @@ Examples:
             args.benchmark,
             limit=args.limit,
             threshold=args.threshold,
-            verbose=True
+            verbose=True,
+            hf_token=hf_token
         )
         
         if not args.no_save and "error" not in result:
@@ -567,6 +713,7 @@ Examples:
         run_all_benchmarks(
             limit=args.limit,
             threshold=args.threshold,
-            save_results=not args.no_save
+            save_results=not args.no_save,
+            hf_token=hf_token
         )
 
