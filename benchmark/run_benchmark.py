@@ -4,26 +4,8 @@ Benchmarking pipeline for Army of Safeguards.
 This script evaluates the safeguarding system (via aggregator) against
 public benchmark datasets for safety and moderation.
 
-Usage:
-    python benchmark/run_benchmark.py --benchmark HarmBench --limit 100
-    python benchmark/run_benchmark.py --benchmark WildGuardMix --limit 500
-    python benchmark/run_benchmark.py --benchmark JailbreakBench --limit 200
-    python benchmark/run_benchmark.py --all --limit 100
-
-For Gated Datasets, you need to authenticate with HuggingFace.
-# Method 1: Command line argument
-python benchmark/run_benchmark.py --benchmark HarmBench --hf-token YOUR_TOKEN
-
-# Method 2: Environment variable (Linux/Mac)
-export HF_TOKEN=YOUR_TOKEN
-python benchmark/run_benchmark.py --benchmark HarmBench
-
-# Method 3: Environment variable (Windows)
-set HF_TOKEN=YOUR_TOKEN
-python benchmark/run_benchmark.py --benchmark HarmBench
-
-# Method 4: Interactive (will prompt if no token found)
-python benchmark/run_benchmark.py --benchmark HarmBench
+For detailed usage instructions, examples, and authentication setup,
+see benchmark/README.md
 """
 
 import sys
@@ -61,18 +43,18 @@ except ImportError:
 BENCHMARKS = {
     "HarmBench": {
         "hf_id": "walledai/HarmBench",
-        "config": None,
-        "split": "test",
-        "text_field": "goal",  # May need adjustment based on actual structure
-        "label_field": "is_refusal",  # Harmful if is_refusal is True (model refused = harmful)
+        "config": "standard",  # Options: 'contextual', 'copyright', 'standard'
+        "split": "train",  # HarmBench only has 'train' split
+        "text_field": "prompt",  # HarmBench field: prompt (or instructions)
+        "label_field": None,  # HarmBench is a red teaming dataset - all examples are harmful/unsafe
         "label_mapping": {
-            # If is_refusal=True, model refused = content is harmful (unsafe)
-            # If is_refusal=False, model didn't refuse = content is safe
-            True: "unsafe",
-            False: "safe"
+            # Since HarmBench is a red teaming dataset, all examples are considered unsafe
+            # If a label field exists, we'll map it, otherwise default to unsafe
         },
-        "note": "Jailbreak & harmful-content robustness benchmark",
-        "requires_auth": True  # This is a gated dataset
+        "default_label": "unsafe",  # All HarmBench examples are harmful by design
+        "note": "Jailbreak & harmful-content robustness benchmark (using 'standard' config, 'train' split)",
+        "requires_auth": True,  # This is a gated dataset
+        "available_configs": ["contextual", "copyright", "standard"]  # Available config options
     },
     "JailbreakBench": {
         "hf_id": "JailbreakBench/JBB-Behaviors",
@@ -89,16 +71,17 @@ BENCHMARKS = {
     },
     "WildGuardMix": {
         "hf_id": "allenai/wildguardmix",
-        "config": None,
-        "split": "test",
-        "text_field": "prompt",  # May need adjustment
-        "label_field": "is_safe",  # May need adjustment
+        "config": "wildguardtest",  # Options: 'wildguardtrain', 'wildguardtest'
+        "split": None,  # Split is determined by config
+        "text_field": "prompt",
+        "label_field": "prompt_harm_label",  # Field indicating if prompt is harmful
         "label_mapping": {
-            True: "safe",
-            False: "unsafe"
+            "unharmful": "safe",
+            "harmful": "unsafe"
         },
-        "note": "Moderation / guardrail benchmark",
-        "requires_auth": False
+        "note": "Moderation / guardrail benchmark (using 'wildguardtest' config)",
+        "requires_auth": True,  # This is a gated dataset
+        "available_configs": ["wildguardtrain", "wildguardtest"]  # Available config options
     }
 }
 
@@ -160,7 +143,7 @@ def authenticate_hf(token: Optional[str] = None) -> bool:
         return False
 
 
-def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_token: Optional[str] = None) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
+def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_token: Optional[str] = None, config_override: Optional[Dict[str, Any]] = None) -> Tuple[List[str], List[str], List[Dict[str, Any]]]:
     """
     Load a benchmark dataset and extract texts and labels.
     
@@ -168,11 +151,12 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
         benchmark_name: Name of the benchmark
         limit: Maximum number of examples to load
         hf_token: Optional HuggingFace token for gated datasets
+        config_override: Optional config dictionary to override default config
         
     Returns:
         Tuple of (texts, labels, metadata)
     """
-    config = BENCHMARKS[benchmark_name]
+    config = config_override if config_override else BENCHMARKS[benchmark_name]
     hf_id = config["hf_id"]
     ds_config = config.get("config")
     split = config.get("split")
@@ -260,9 +244,96 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
         else:
             # Standard dataset loading
             if ds_config:
-                ds = load_dataset(hf_id, ds_config, split=split, trust_remote_code=True)
+                try:
+                    ds = load_dataset(hf_id, ds_config, split=split, trust_remote_code=True)
+                except ValueError as e:
+                    # Check if it's a split error
+                    if "Unknown split" in str(e) or "Should be one of" in str(e):
+                        # Try to get available splits
+                        from datasets import get_dataset_config_names, get_dataset_split_names
+                        try:
+                            available_splits = get_dataset_split_names(hf_id, config_name=ds_config)
+                            raise ValueError(
+                                f"\n{'='*70}\n"
+                                f"Invalid split '{split}' for {benchmark_name}\n"
+                                f"{'='*70}\n"
+                                f"Available splits: {available_splits}\n"
+                                f"Update the 'split' field in BENCHMARKS configuration.\n"
+                                f"{'='*70}\n"
+                                f"Original error: {str(e)}"
+                            )
+                        except:
+                            raise ValueError(
+                                f"\n{'='*70}\n"
+                                f"Invalid split '{split}' for {benchmark_name}\n"
+                                f"{'='*70}\n"
+                                f"Please check the dataset documentation for available splits.\n"
+                                f"Update the 'split' field in BENCHMARKS configuration.\n"
+                                f"{'='*70}\n"
+                                f"Original error: {str(e)}"
+                            )
+                    raise
             else:
-                ds = load_dataset(hf_id, split=split, trust_remote_code=True)
+                # Some datasets require a config - try to load with split only
+                # If that fails, the error will be caught and reported
+                try:
+                    ds = load_dataset(hf_id, split=split, trust_remote_code=True)
+                except ValueError as e:
+                    if "Config name is missing" in str(e) or "config" in str(e).lower():
+                        available_configs = config.get("available_configs", [])
+                        if available_configs:
+                            raise ValueError(
+                                f"\n{'='*70}\n"
+                                f"Config required for {benchmark_name}\n"
+                                f"{'='*70}\n"
+                                f"This dataset requires a config name. Available configs: {available_configs}\n"
+                                f"Default config '{available_configs[0]}' will be used.\n"
+                                f"To use a different config, modify BENCHMARKS in run_benchmark.py\n"
+                                f"{'='*70}\n"
+                                f"Original error: {str(e)}"
+                            )
+                    elif "Unknown split" in str(e) or "Should be one of" in str(e):
+                        raise ValueError(
+                            f"\n{'='*70}\n"
+                            f"Invalid split '{split}' for {benchmark_name}\n"
+                            f"{'='*70}\n"
+                            f"Please check the dataset documentation for available splits.\n"
+                            f"Update the 'split' field in BENCHMARKS configuration.\n"
+                            f"{'='*70}\n"
+                            f"Original error: {str(e)}"
+                        )
+                    raise
+            
+            # Handle DatasetDict (when split=None returns a dictionary of splits)
+            from datasets import DatasetDict
+            if isinstance(ds, DatasetDict):
+                # If split is None, try to use a default split from config or use 'test'
+                if split is None:
+                    # Try common split names in order of preference
+                    preferred_splits = ['test', 'validation', 'val', 'train']
+                    selected_split = None
+                    for preferred in preferred_splits:
+                        if preferred in ds:
+                            selected_split = preferred
+                            break
+                    
+                    if selected_split is None:
+                        # Use the first available split
+                        selected_split = list(ds.keys())[0]
+                    
+                    ds = ds[selected_split]
+                else:
+                    # Split was specified but we got a DatasetDict - try to use it
+                    if split in ds:
+                        ds = ds[split]
+                    else:
+                        raise ValueError(
+                            f"\n{'='*70}\n"
+                            f"Split '{split}' not found in dataset\n"
+                            f"{'='*70}\n"
+                            f"Available splits: {list(ds.keys())}\n"
+                            f"{'='*70}"
+                        )
             
             # Sample if limit is specified
             if limit and len(ds) > limit:
@@ -270,14 +341,42 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
                 indices = random.sample(range(len(ds)), limit)
                 ds = ds.select(indices)
             
+            # Get first example to check available fields (for diagnostics)
+            first_example = None
+            available_fields = []
+            if len(ds) > 0:
+                first_example = ds[0]
+                available_fields = list(first_example.keys())
+            
             # Extract texts and labels
             for ex in ds:
                 # Try to find text field (case-insensitive)
+                # Also try common alternatives: prompt, instructions, text, input
                 text = None
-                for key in ex.keys():
-                    if key.lower() == text_field.lower():
-                        text = ex[key]
+                context = None
+                text_field_candidates = [text_field, "prompt", "instructions", "text", "input"]
+                for candidate in text_field_candidates:
+                    for key in ex.keys():
+                        if key.lower() == candidate.lower():
+                            text = ex[key]
+                            break
+                    if text:
                         break
+                
+                # Also check for context field (for HarmBench contextual config)
+                for key in ex.keys():
+                    if key.lower() == "context":
+                        context_val = ex[key]
+                        if isinstance(context_val, str) and len(context_val.strip()) > 0:
+                            context = context_val
+                        break
+                
+                # Combine prompt and context if both exist
+                if text and context:
+                    text = f"{context}\n\n{text}"
+                elif context and not text:
+                    # If only context exists, use it
+                    text = context
                 
                 if not text or not isinstance(text, str) or len(text.strip()) == 0:
                     continue
@@ -297,6 +396,25 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
                         # Map label
                         if isinstance(raw_label, bool):
                             mapped_label = label_mapping.get(raw_label, "unsafe" if not raw_label else "safe")
+                        elif isinstance(raw_label, (int, float)):
+                            # Handle numeric labels (e.g., 0, 1)
+                            mapped_label = label_mapping.get(int(raw_label), label_mapping.get(raw_label, "unsafe" if raw_label else "safe"))
+                        elif isinstance(raw_label, str):
+                            # Handle string labels - try exact match first, then case-insensitive
+                            if raw_label in label_mapping:
+                                mapped_label = label_mapping[raw_label]
+                            else:
+                                # Try case-insensitive match
+                                raw_label_lower = raw_label.lower()
+                                found = False
+                                for key, value in label_mapping.items():
+                                    if isinstance(key, str) and key.lower() == raw_label_lower:
+                                        mapped_label = value
+                                        found = True
+                                        break
+                                if not found:
+                                    # Default: assume "harmful" or similar means unsafe
+                                    mapped_label = "unsafe" if "harm" in raw_label_lower else "safe"
                         elif raw_label in label_mapping:
                             mapped_label = label_mapping[raw_label]
                         else:
@@ -304,13 +422,23 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
                             mapped_label = "unsafe" if not raw_label else "safe"
                         labels.append(mapped_label)
                     else:
-                        # If label field not found, skip this example
+                        # If label field not found, use default if available
+                        default_label = config.get("default_label")
+                        if default_label:
+                            labels.append(default_label)
+                        else:
+                            # If no default and label field required, skip
+                            texts.pop()
+                            continue
+                else:
+                    # No label field specified - use default_label if available
+                    default_label = config.get("default_label")
+                    if default_label:
+                        labels.append(default_label)
+                    else:
+                        # No label field and no default - skip
                         texts.pop()
                         continue
-                else:
-                    # No label field specified, skip
-                    texts.pop()
-                    continue
                 
                 # Store metadata
                 metadata.append({
@@ -327,7 +455,24 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
             metadata = [metadata[i] for i in indices]
         
         if len(texts) == 0:
-            raise ValueError(f"No valid examples found in {benchmark_name}. Check field names.")
+            # Provide helpful error message with available fields
+            error_msg = f"No valid examples found in {benchmark_name}. Check field names.\n"
+            if first_example is not None:
+                error_msg += f"\nAvailable fields in dataset: {available_fields}\n"
+                error_msg += f"Looking for text field: '{text_field}' (or alternatives: prompt, instructions, text, input)\n"
+                if label_field:
+                    error_msg += f"Looking for label field: '{label_field}'\n"
+                else:
+                    error_msg += f"No label field specified (using default_label: {config.get('default_label', 'None')})\n"
+                error_msg += f"\nFirst example keys: {list(first_example.keys())}\n"
+                # Show sample values
+                for key, value in list(first_example.items())[:5]:
+                    if isinstance(value, str):
+                        preview = value[:50] + "..." if len(value) > 50 else value
+                        error_msg += f"  {key}: {preview}\n"
+                    else:
+                        error_msg += f"  {key}: {value}\n"
+            raise ValueError(error_msg)
         
         return texts, labels, metadata
         
@@ -363,7 +508,8 @@ def evaluate_on_benchmark(
     limit: Optional[int] = None,
     threshold: float = 0.7,
     verbose: bool = True,
-    hf_token: Optional[str] = None
+    hf_token: Optional[str] = None,
+    config_override: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     Evaluate the safeguarding system on a benchmark dataset.
@@ -387,7 +533,17 @@ def evaluate_on_benchmark(
         # Load dataset
         if verbose:
             print("Loading dataset...")
-        texts, ground_truth_labels, metadata = load_benchmark_dataset(benchmark_name, limit, hf_token)
+        
+        # Create a copy of config for this evaluation (to allow override without mutating global)
+        eval_config = BENCHMARKS[benchmark_name].copy()
+        if config_override:
+            eval_config["config"] = config_override
+            if verbose:
+                print(f"Using config: {config_override} (override)")
+        
+        texts, ground_truth_labels, metadata = load_benchmark_dataset(
+            benchmark_name, limit, hf_token, config_override=eval_config if config_override else None
+        )
         
         if len(texts) == 0:
             return {
@@ -675,6 +831,12 @@ Examples:
         default=None,
         help="HuggingFace token for accessing gated datasets (or set HF_TOKEN env var)"
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Override dataset config (e.g., for HarmBench: 'standard', 'contextual', or 'copyright')"
+    )
     
     args = parser.parse_args()
     
@@ -694,7 +856,8 @@ Examples:
             limit=args.limit,
             threshold=args.threshold,
             verbose=True,
-            hf_token=hf_token
+            hf_token=hf_token,
+            config_override=args.config
         )
         
         if not args.no_save and "error" not in result:

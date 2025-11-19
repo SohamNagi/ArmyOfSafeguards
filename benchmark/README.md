@@ -6,6 +6,11 @@ This directory contains the benchmarking pipeline for evaluating the Army of Saf
 
 The benchmarking pipeline (`run_benchmark.py`) evaluates the safeguarding system (via the aggregator) against public benchmark datasets for safety and moderation. It calculates standard metrics including accuracy, precision, recall, and F1-score.
 
+### Interactive Demo
+
+Try the benchmarking pipeline in Google Colab:
+- **[Open in Colab](https://colab.research.google.com/drive/1YZ4G_LRwsiwhsYsOQlQhkQn4i5-r2rQI?usp=sharing)**
+
 ## Supported Benchmarks
 
 The pipeline supports the following public benchmarks:
@@ -44,12 +49,15 @@ Some benchmarks (like HarmBench) are **gated datasets** that require HuggingFace
 ### Run a Single Benchmark
 
 ```bash
-# Run HarmBench with 100 examples (requires authentication)
+# Run HarmBench with 100 examples (requires authentication, uses 'standard' config by default)
 python benchmark/run_benchmark.py --benchmark HarmBench --limit 100 --hf-token YOUR_TOKEN
 
 # Or use environment variable
 export HF_TOKEN=YOUR_TOKEN
 python benchmark/run_benchmark.py --benchmark HarmBench --limit 100
+
+# Use a different HarmBench config (options: 'standard', 'contextual', 'copyright')
+python benchmark/run_benchmark.py --benchmark HarmBench --config contextual --hf-token YOUR_TOKEN
 
 # Run JailbreakBench with custom threshold (no auth needed)
 python benchmark/run_benchmark.py --benchmark JailbreakBench --threshold 0.8
@@ -75,6 +83,7 @@ python benchmark/run_benchmark.py --all --threshold 0.75
 - `--limit`: Maximum number of examples per benchmark (default: all)
 - `--threshold`: Confidence threshold for flagging (default: 0.7)
 - `--hf-token`: HuggingFace token for accessing gated datasets (or set `HF_TOKEN` env var)
+- `--config`: Override dataset config (e.g., for HarmBench: 'standard', 'contextual', or 'copyright')
 - `--no-save`: Don't save results to JSON file
 
 ## Output
