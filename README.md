@@ -41,6 +41,10 @@ ArmyOfSafeguards/
 ├── aggregator/              # Unified interface for all safeguards
 │   ├── aggregator.py
 │   └── README.md
+├── demo_server.py           # Interactive Demo Server
+├── demo_requirements.txt    # Demo dependencies
+├── templates/               # Frontend templates
+│   └── index.html           # Neobrutalist Dashboard
 ├── requirements.txt         # Shared dependencies
 ├── .gitignore
 └── README.md
@@ -63,7 +67,21 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 2. Use Individual Safeguards
+### 2. Run the Interactive Demo (Recommended)
+
+Launch the Neobrutalist dashboard to interactively test all safeguards and view benchmark results.
+
+```bash
+# Install demo dependencies (if not already installed)
+pip install -r demo_requirements.txt
+
+# Start the demo server
+python demo_server.py
+```
+
+Then open **http://localhost:8000** in your browser.
+
+### 3. Use Individual Safeguards (CLI)
 
 ```bash
 # Run factuality check
@@ -79,7 +97,7 @@ python toxicity/safeguard_toxicity.py "Your text to evaluate"
 python jailbreak/safeguard_jailbreak.py "Your text to evaluate"
 ```
 
-### 3. Aggregator (All Safeguards)
+### 4. Aggregator (All Safeguards via CLI)
 
 The aggregator runs all available safeguards and provides a unified safety assessment:
 
@@ -169,7 +187,7 @@ print(f"Label: {result['label']}, Confidence: {result['confidence']:.2%}")
 from aggregator.aggregator import evaluate_text
 
 # Runs all available safeguards (factuality, sexual, toxicity, jailbreak)
-result = evaluate_text("Your text here", threshold=0.7)
+result = evaluate_text("Your text here")
 print(f"Is Safe: {result['is_safe']}")
 print(f"Individual Results: {result['individual_results']}")
 ```
@@ -207,68 +225,45 @@ python jailbreak/tests/benchmark_jailbreak.jbb.py
 
 ### Evaluation Results
 
-**Factuality Safeguard Performance**:
+#### Factuality Safeguard
 
-⚠️ **Note**: Model trained on TruthfulQA & FEVER - use OOD datasets for true generalization.
+- Trained on TruthfulQA and FEVER (sanity-check factuality datasets)  
+- Evaluated on out-of-distribution factuality datasets such as:
+  - VitaminC (general contradiction-aware claims)
+  - Climate-FEVER (climate misinformation)
+  - LIAR (political fact-checking)
+- See `factuality/tests/README.md` for detailed metrics and scripts.
 
-**Out-of-Distribution (True Generalization)**:
-| Dataset | Accuracy | F1-Score | Domain |
-|---------|----------|----------|--------|
-| VitaminC | 54.00% | 36.11% | General claims |
-| Climate-FEVER | 81.00% | - | Climate-specific |
-| LIAR | 81.00% | - | Political statements |
+#### Sexual Content Safeguard
 
-**Training Data (Sanity Check)**:
-| Dataset | Accuracy | F1-Score |
-|---------|----------|----------|
-| FEVER | 84.00% | 78.38% |
-| TruthfulQA | 75.00% | - |
+- Trained on the CardiffNLP x_sensitive dataset  
+- Evaluated on held-out x_sensitive test data  
+- See `sexual/tests/README.md` for metrics and scripts.
 
-**Sexual Content Safeguard Performance**:
+#### Toxicity Safeguard
 
-⚠️ **Note**: Model trained on CardiffNLP x_sensitive dataset.
+- Trained on ToxiGen and related toxicity datasets  
+- Evaluated on ToxiGen test split and other toxicity benchmarks  
+- See `toxicity/tests/README.md` for metrics and scripts.
 
-**Test Set Performance**:
-| Metric | Score |
-|--------|-------|
-| Accuracy | 82.6% |
-| F1-Score | 82.9% |
+#### Jailbreak Safeguard
 
-**Toxicity Safeguard Performance**:
+- Trained on TrustAIRLab/in-the-wild-jailbreak-prompts and related jailbreak data  
+- Evaluated on JailbreakBench and other jailbreak test sets  
+- See `jailbreak/tests/README.md` for metrics and scripts.
 
-⚠️ **Note**: Model trained on ToxiGen dataset.
+### Benchmark Datasets
 
-**ToxiGen Test Set**:
-| Metric | Score |
-|--------|-------|
-| Accuracy | 79.00% |
-| Precision | 75.00% |
-| Recall | 69.23% |
-| F1-Score | 72.00% |
+**Individual safeguards** are evaluated on task-specific datasets such as:
+- Factuality: TruthfulQA, FEVER, SciFact, VitaminC, Climate-FEVER, LIAR  
+- Sexual Content: CardiffNLP x_sensitive  
+- Toxicity: ToxiGen, hate_speech18, Civil Comments  
+- Jailbreak: JBB-Behaviors and related jailbreak corpora  
 
-**Jailbreak Safeguard Performance**:
-
-⚠️ **Note**: Model trained on TrustAIRLab/in-the-wild-jailbreak-prompts dataset.
-
-**ToxiGen Test Set**:
-| Metric | Score |
-|--------|-------|
-| Accuracy | 94.8248% |
-| F1-Score | 65.7143% |
-
-### Individual Safeguard Benchmark Datasets
-
-- **Factuality**: TruthfulQA, FEVER, SciFact, VitaminC, Climate-FEVER
-- **Sexual Content**: CardiffNLP x_sensitive
-- **Toxicity**: ToxiGen, hate_speech18, civil_comments
-- **Jailbreak**: JBB-Behaviors
-
-See individual safeguard test directories for evaluation scripts.
-
-### Safeguard System Benchmark Datasets
-- **Jailbreak & harmful-content robustness**: [HarmBench](https://huggingface.co/datasets/walledai/HarmBench), [JailbreakBench](https://huggingface.co/datasets/JailbreakBench/JBB-Behaviors)
-- **Moderation / guardrail benchmarks**: [WildGuardMix](https://huggingface.co/datasets/allenai/wildguardmix)
-- **Broader safety suites**: [HELM Safety](https://crfm.stanford.edu/helm/safety/latest/), have to check if it's opensource
+**The full system (aggregator)** is evaluated on:
+- HarmBench – harmful content and jailbreak robustness  
+- JailbreakBench – jailbreak behavior detection  
+- WildGuardMix – safety / moderation behavior  
 
 ## 🤝 Contributing
 
@@ -286,9 +281,6 @@ Each team member maintains their own safeguard module:
 - Transformers
 - See `requirements.txt` for full list
 
-## 📄 License
-
-[Add license information]
 
 ## 👥 Team
 
