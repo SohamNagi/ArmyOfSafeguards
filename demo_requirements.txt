@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+python-multipart
+jinja2
+transformers
+torch
+scikit-learn
+evaluate
+datasets
+huggingface_hub
+safetensors
+tqdm
+pandas
+
