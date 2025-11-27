@@ -24,7 +24,8 @@ from aggregator import run_all_safeguards
 
 
 def parse_args() -> argparse.Namespace:
-    script_dir = Path(__file__).parent
+    # Use current working directory instead of script directory
+    cwd = Path.cwd()
     parser = argparse.ArgumentParser(
         description="Generate KNN reference data with batching and checkpoints.",
     )
@@ -37,13 +38,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--checkpoint-file",
         type=Path,
-        default=script_dir / "knn_reference_hh_rlhf_full.checkpoint.json",
+        default=cwd / "knn_reference_hh_rlhf_full.checkpoint.json",
         help="Path to checkpoint progress for resuming long runs.",
     )
     parser.add_argument(
         "--output-file",
         type=Path,
-        default=script_dir / "knn_reference_hh_rlhf_full.jsonl",
+        default=cwd / "knn_reference_hh_rlhf_full.jsonl",
         help="JSONL file that receives the reference dataset.",
     )
     parser.add_argument(
@@ -200,9 +201,13 @@ def process_split(
 
 def main() -> None:
     args = parse_args()
-    script_dir = Path(__file__).parent
+    # Ensure output directory exists (use parent of output file if needed)
+    args.output_file.parent.mkdir(parents=True, exist_ok=True)
+    args.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
 
     print(f"Loading Anthropic/hh-rlhf dataset (subset='{args.subset}', split='{args.split}')...")
+    print(f"Output will be saved to: {args.output_file.absolute()}")
+    print(f"Checkpoint will be saved to: {args.checkpoint_file.absolute()}")
     dataset = load_dataset("Anthropic/hh-rlhf", data_dir=args.subset, split=args.split)
     total = len(dataset)
     print(
@@ -261,13 +266,28 @@ def main() -> None:
             save_checkpoint(args.checkpoint_file, checkpoint_state)
             print(f"➡️  Partial progress stored in {args.checkpoint_file}")
 
+    # Count records in output file if it exists
+    record_count = 0
+    if args.output_file.exists():
+        try:
+            with open(args.output_file, "r", encoding="utf-8") as f:
+                record_count = sum(1 for line in f if line.strip())
+        except Exception:
+            pass
+    
     print("\n" + "=" * 60)
     print("KNN Reference Data Generation Complete" if completed else "KNN Data Generation Paused")
     print("=" * 60)
-    print(f"Reference data file: {args.output_file}")
+    print(f"Reference data file: {args.output_file.absolute()}")
+    if record_count > 0:
+        print(f"Total records available: {record_count}")
+    if not completed:
+        print("⚠️  Note: Processing incomplete. You can still use all available data for predictions.")
     print("\nTo load the reference data, use:")
     print("  from aggregator.aggregator import load_knn_reference_data")
-    print(f"  load_knn_reference_data('{args.output_file}')")
+    print(f"  load_knn_reference_data('{args.output_file.absolute()}')")
+    print("\nOr use relative path from current directory:")
+    print(f"  load_knn_reference_data('{args.output_file.name}')")
 
 
 if __name__ == "__main__":

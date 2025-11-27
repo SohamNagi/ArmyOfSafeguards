@@ -65,6 +65,9 @@ def load_knn_reference_data(jsonl_path: str = "knn_reference_2000.jsonl"):
     """
     Load reference data for KNN aggregator (only need to run once!).
     
+    This function loads all available data from the JSONL file, even if processing
+    was incomplete. It gracefully handles malformed lines and uses all valid data.
+    
     JSONL format (each line):
     {"text": "...", "conf_fact":0.93, "conf_tox":0.02, "conf_sex":0.88, "conf_jb":0.01, "is_safe": false}
     
@@ -72,21 +75,59 @@ def load_knn_reference_data(jsonl_path: str = "knn_reference_2000.jsonl"):
         jsonl_path: Path to the JSONL file containing reference data
     """
     import json
+    from pathlib import Path
+    
+    jsonl_path = Path(jsonl_path)
+    if not jsonl_path.exists():
+        raise FileNotFoundError(f"Reference data file not found: {jsonl_path}")
     
     data = []
+    skipped_lines = 0
+    
     with open(jsonl_path, "r", encoding="utf-8") as f:
-        for line in f:
-            item = json.loads(line.strip())
-            confs = [
-                item["conf_fact"],
-                item.get("conf_tox", 0.0),     # toxicity may not exist, use 0.0
-                item["conf_sex"],
-                item["conf_jb"]
-            ]
-            data.append({
-                'confidences': confs,
-                'is_safe': item["is_safe"]
-            })
+        for line_num, line in enumerate(f, 1):
+            line = line.strip()
+            if not line:  # Skip empty lines
+                continue
+            
+            try:
+                item = json.loads(line)
+                # Validate required fields
+                if "conf_fact" not in item or "conf_sex" not in item or "conf_jb" not in item:
+                    skipped_lines += 1
+                    continue
+                
+                confs = [
+                    float(item["conf_fact"]),
+                    float(item.get("conf_tox", 0.0)),     # toxicity may not exist, use 0.0
+                    float(item["conf_sex"]),
+                    float(item["conf_jb"])
+                ]
+                
+                # Validate is_safe field
+                is_safe = item.get("is_safe", True)
+                if not isinstance(is_safe, bool):
+                    # Try to convert if it's a string
+                    if isinstance(is_safe, str):
+                        is_safe = is_safe.lower() in ("true", "1", "yes")
+                    else:
+                        is_safe = bool(is_safe)
+                
+                data.append({
+                    'confidences': confs,
+                    'is_safe': is_safe
+                })
+            except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+                skipped_lines += 1
+                if skipped_lines <= 5:  # Only show first few errors
+                    print(f"[KNN] Warning: Skipping malformed line {line_num}: {e}")
+                continue
+    
+    if not data:
+        raise ValueError(f"No valid reference data found in {jsonl_path}. File may be empty or corrupted.")
+    
+    if skipped_lines > 0:
+        print(f"[KNN] Warning: Skipped {skipped_lines} malformed lines, using {len(data)} valid samples")
     
     knn_aggregator.fit(data)
     print(f"[KNN] Loaded {len(data)} reference samples")
