@@ -67,14 +67,31 @@ def load_granite_model():
         
         print(f"Loading IBM Granite model: {GRANITE_MODEL_ID}")
         tokenizer = AutoTokenizer.from_pretrained(GRANITE_MODEL_ID)
-        model = AutoModelForCausalLM.from_pretrained(GRANITE_MODEL_ID)
-        model.eval()
         
+        # Optimize model loading for faster shard loading
+        load_kwargs = {
+            "low_cpu_mem_usage": True,  # Reduces memory usage during loading
+        }
+        
+        # Try to use safetensors if available (faster loading)
+        try:
+            from safetensors import safe_open
+            load_kwargs["use_safetensors"] = True
+        except ImportError:
+            # Safetensors not available, will use regular loading
+            pass
+        
+        # Use device_map="auto" for automatic device placement (faster loading)
         if torch.cuda.is_available():
-            model = model.cuda()
-            print("✅ Using GPU for Granite model")
+            load_kwargs["device_map"] = "auto"
+            load_kwargs["torch_dtype"] = torch.float16  # Use float16 for faster loading and less memory
+            print("✅ Using GPU with optimized loading (device_map=auto, float16)")
         else:
             print("⚠️  Using CPU for Granite model (slower)")
+        
+        print("Loading model shards (this may take a moment)...")
+        model = AutoModelForCausalLM.from_pretrained(GRANITE_MODEL_ID, **load_kwargs)
+        model.eval()
         
         return tokenizer, model
     except Exception as e:
