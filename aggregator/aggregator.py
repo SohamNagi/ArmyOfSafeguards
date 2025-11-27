@@ -11,6 +11,12 @@ from typing import Dict, List, Any
 # Add parent directory to path so we can import safeguards
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# Import KNN aggregator
+from knn_aggregator import KNNAggregator
+
+# Create global KNN aggregator instance (will be fitted later)
+knn_aggregator = KNNAggregator(k=7)  # You can experiment with k=5,7,9,11
+
 
 def run_all_safeguards(text: str) -> Dict[str, Any]:
     """
@@ -55,13 +61,49 @@ def run_all_safeguards(text: str) -> Dict[str, Any]:
     return results
 
 
-def aggregate_results(results: Dict[str, Dict[str, Any]], threshold: float = 0.7) -> Dict[str, Any]:
+def load_knn_reference_data(jsonl_path: str = "knn_reference_2000.jsonl"):
+    """
+    Load reference data for KNN aggregator (only need to run once!).
+    
+    JSONL format (each line):
+    {"text": "...", "conf_fact":0.93, "conf_tox":0.02, "conf_sex":0.88, "conf_jb":0.01, "is_safe": false}
+    
+    Args:
+        jsonl_path: Path to the JSONL file containing reference data
+    """
+    import json
+    
+    data = []
+    with open(jsonl_path, "r", encoding="utf-8") as f:
+        for line in f:
+            item = json.loads(line.strip())
+            confs = [
+                item["conf_fact"],
+                item.get("conf_tox", 0.0),     # toxicity may not exist, use 0.0
+                item["conf_sex"],
+                item["conf_jb"]
+            ]
+            data.append({
+                'confidences': confs,
+                'is_safe': item["is_safe"]
+            })
+    
+    knn_aggregator.fit(data)
+    print(f"[KNN] Loaded {len(data)} reference samples")
+
+
+def aggregate_results(
+    results: Dict[str, Dict[str, Any]], 
+    threshold: float = 0.7,
+    use_knn: bool = True  # New switch!!!
+) -> Dict[str, Any]:
     """
     Aggregate results from multiple safeguards.
 
     Args:
         results: Dictionary of results from each safeguard
         threshold: Confidence threshold for flagging (default: 0.7)
+        use_knn: Whether to use KNN aggregation (default: True)
 
     Returns:
         Aggregated decision with overall safety assessment
@@ -110,37 +152,58 @@ def aggregate_results(results: Dict[str, Dict[str, Any]], threshold: float = 0.7
 
         confidences.append(confidence)
 
-    # Calculate overall safety score
-    avg_confidence = sum(confidences) / \
-        len(confidences) if confidences else 0.0
-    is_safe = len(flags) == 0
+    # Extract four confidences in fixed order: factuality, toxicity, sexual, jailbreak
+    conf_vector = [
+        results.get('factuality', {}).get('confidence', 0.0),
+        results.get('toxicity', {}).get('confidence', 0.0),
+        results.get('sexual', {}).get('confidence', 0.0),
+        results.get('jailbreak', {}).get('confidence', 0.0),
+    ]
 
-    return {
-        'is_safe': is_safe,
-        'flags': flags,
-        'average_confidence': avg_confidence,
-        'individual_results': results
-    }
+    if use_knn and knn_aggregator.is_fitted:
+        knn_result = knn_aggregator.predict(conf_vector)
+        return {
+            'is_safe': knn_result['is_safe'],
+            'flags': flags,  # Still keep which models triggered
+            'average_confidence': sum(conf_vector) / len(conf_vector),
+            'individual_results': results,
+            'aggregation_method': 'knn',
+            'knn_detail': knn_result
+        }
+    else:
+        # Original majority vote logic (flag if >= 2 safeguards trigger)
+        is_safe = len(flags) < 2  # Original logic: >= 2 flags means unsafe
+        return {
+            'is_safe': is_safe,
+            'flags': flags,
+            'average_confidence': sum(conf_vector) / 4,
+            'individual_results': results,
+            'aggregation_method': 'majority_vote_2'
+        }
 
 
-def evaluate_text(text: str, threshold: float = 0.7) -> Dict[str, Any]:
+def evaluate_text(text: str, threshold: float = 0.7, use_knn: bool = True) -> Dict[str, Any]:
     """
     Convenience function to run all safeguards and aggregate results.
 
     Args:
         text: Input text to evaluate
         threshold: Confidence threshold for flagging
+        use_knn: Whether to use KNN aggregation (default: True)
 
     Returns:
         Aggregated safety assessment
     """
     results = run_all_safeguards(text)
-    return aggregate_results(results, threshold)
+    return aggregate_results(results, threshold, use_knn)
 
 
 if __name__ == "__main__":
     # Example usage
     import sys
+
+    # You can load KNN reference data here (only need to run once)
+    # load_knn_reference_data("data/knn_reference_2000.jsonl")
 
     if len(sys.argv) > 1:
         test_text = " ".join(sys.argv[1:])
