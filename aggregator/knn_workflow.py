@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""KNN Aggregator Complete Workflow Script.
+"""KNN Aggregator Workflow Script.
 
-This script automates the complete workflow for KNN aggregator:
-1. Generate KNN reference data from HH-RLHF dataset
-2. Evaluate aggregator performance (KNN vs Majority Vote or vs IBM Granite)
-3. Display comparison results
+This script automates the complete workflow:
+1. Generate KNN reference data from HH-RLHF dataset (sampling)
+2. Compare KNN aggregator vs IBM Granite-4.0-H-Tiny on benchmark dataset
 
 Usage:
     python aggregator/knn_workflow.py
     python aggregator/knn_workflow.py --skip-generation  # Skip step 1 if data already exists
     python aggregator/knn_workflow.py --limit 200 --threshold 0.7
-    python aggregator/knn_workflow.py --compare-granite  # Compare with IBM Granite instead
 """
 import sys
 import subprocess
@@ -87,49 +85,6 @@ def generate_reference_data(
         return False
 
 
-def evaluate_performance(
-    reference_file: Optional[str] = None,
-    limit: int = 100,
-    threshold: float = 0.7,
-    compare: bool = True,
-) -> bool:
-    """Evaluate aggregator performance with KNN vs Majority Vote."""
-    if reference_file is None:
-        reference_file = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
-    else:
-        reference_file = Path(reference_file)
-    
-    # Check if reference file exists
-    if not reference_file.exists():
-        print(f"\n❌ Error: Reference data file not found: {reference_file}")
-        print("Please run reference data generation first (skip with --skip-generation)")
-        return False
-    
-    # Build evaluation command
-    script_path = Path(__file__).parent / "evaluate_aggregator.py"
-    cmd = [
-        sys.executable,
-        str(script_path),
-        "--dataset", "hh-rlhf",
-        "--limit", str(limit),
-        "--knn-reference", str(reference_file),
-        "--threshold", str(threshold),
-    ]
-    
-    if compare:
-        cmd.append("--compare")
-    
-    description = "Step 2: Evaluating Aggregator Performance"
-    if compare:
-        description += " (KNN vs Majority Vote Comparison)"
-    
-    success = run_command(
-        cmd,
-        description,
-        check=False
-    )
-    
-    return success
 
 
 def main():
@@ -146,9 +101,6 @@ Examples:
   
   # Custom parameters
   python aggregator/knn_workflow.py --limit 200 --threshold 0.8
-  
-  # Only evaluate (no comparison)
-  python aggregator/knn_workflow.py --skip-generation --no-compare
         """
     )
     
@@ -181,20 +133,10 @@ Examples:
         help="Confidence threshold for flagging (default: 0.7)",
     )
     parser.add_argument(
-        "--no-compare",
-        action="store_true",
-        help="Don't compare KNN vs Majority Vote (only test KNN)",
-    )
-    parser.add_argument(
         "--output-dir",
         type=str,
         default=None,
         help="Directory to save results (default: aggregator/)",
-    )
-    parser.add_argument(
-        "--compare-granite",
-        action="store_true",
-        help="Compare with IBM Granite-4.0-H-Tiny instead of Majority Vote",
     )
     
     args = parser.parse_args()
@@ -207,7 +149,7 @@ Examples:
     print(f"  Force generation: {args.force_generation}")
     print(f"  Evaluation limit: {args.limit}")
     print(f"  Threshold: {args.threshold}")
-    print(f"  Compare methods: {not args.no_compare}")
+    print(f"  Comparison: KNN Aggregator vs IBM Granite-4.0-H-Tiny")
     print("="*60)
     
     # Step 1: Generate reference data
@@ -231,40 +173,30 @@ Examples:
             print(f"⚠️  Warning: Reference file not found: {ref_file}")
             print("Consider running without --skip-generation to generate it")
     
-    # Step 2: Evaluate performance
-    if args.compare_granite:
-        # Compare with IBM Granite
-        print("\n" + "="*60)
-        print("Comparing with IBM Granite-4.0-H-Tiny")
-        print("="*60)
-        script_path = Path(__file__).parent / "evaluate_vs_granite.py"
-        cmd = [
-            sys.executable,
-            str(script_path),
-            "--dataset", "hh-rlhf",
-            "--limit", str(args.limit),
-            "--threshold", str(args.threshold),
-        ]
-        if args.reference_file:
-            cmd.extend(["--knn-reference", str(args.reference_file)])
-        else:
-            default_ref = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
-            if default_ref.exists():
-                cmd.extend(["--knn-reference", str(default_ref)])
-        
-        success = run_command(
-            cmd,
-            "Step 2: Evaluating KNN vs IBM Granite",
-            check=False
-        )
+    # Step 2: Compare KNN vs IBM Granite on benchmark
+    print("\n" + "="*60)
+    print("Step 2: Comparing KNN Aggregator vs IBM Granite-4.0-H-Tiny")
+    print("="*60)
+    script_path = Path(__file__).parent / "evaluate_vs_granite.py"
+    cmd = [
+        sys.executable,
+        str(script_path),
+        "--dataset", "hh-rlhf",
+        "--limit", str(args.limit),
+        "--threshold", str(args.threshold),
+    ]
+    if args.reference_file:
+        cmd.extend(["--knn-reference", str(args.reference_file)])
     else:
-        # Compare with Majority Vote (default)
-        success = evaluate_performance(
-            reference_file=args.reference_file,
-            limit=args.limit,
-            threshold=args.threshold,
-            compare=not args.no_compare,
-        )
+        default_ref = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
+        if default_ref.exists():
+            cmd.extend(["--knn-reference", str(default_ref)])
+    
+    success = run_command(
+        cmd,
+        "Step 2: Evaluating KNN vs IBM Granite on benchmark",
+        check=False
+    )
     
     if success:
         print("\n" + "="*60)

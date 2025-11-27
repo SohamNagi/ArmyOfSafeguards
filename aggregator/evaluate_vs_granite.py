@@ -29,7 +29,7 @@ from sklearn.metrics import (
 )
 
 # IBM Granite model configuration
-GRANITE_MODEL_ID = "ibm-granite/granite-4.0-h-tiny-instruct"  # Update with actual model ID if different
+GRANITE_MODEL_ID = "ibm-granite/granite-4.0-h-tiny"  # Update with actual model ID if different
 
 # Benchmark datasets configuration
 BENCHMARKS = {
@@ -151,6 +151,105 @@ def map_hh_rlhf_to_safe_unsafe(item: Dict, use_chosen: bool = True) -> Tuple[str
         return item["rejected"], False
 
 
+def evaluate_knn_aggregator(
+    dataset_name: str,
+    limit: int = 100,
+    threshold: float = 0.7,
+) -> Dict[str, Any]:
+    """Evaluate KNN aggregator on benchmark dataset."""
+    if dataset_name not in BENCHMARKS:
+        raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(BENCHMARKS.keys())}")
+    
+    config = BENCHMARKS[dataset_name]
+    
+    # Load dataset
+    print(f"\nLoading dataset: {config['dataset']}")
+    try:
+        if "data_dir" in config:
+            dataset = load_dataset(config["dataset"], data_dir=config["data_dir"], split=config.get("split", "train"))
+        elif "config" in config:
+            dataset = load_dataset(config["dataset"], config["config"], split=config.get("split", "train"))
+        else:
+            dataset = load_dataset(config["dataset"], split=config.get("split", "train"))
+    except Exception as e:
+        print(f"Warning: Could not load dataset: {e}")
+        return {"error": str(e)}
+    
+    # Limit dataset size
+    if limit and limit > 0:
+        dataset = dataset.select(range(min(limit, len(dataset))))
+    
+    print(f"Evaluating KNN Aggregator on {len(dataset)} examples...")
+    
+    predictions = []
+    ground_truth = []
+    confidences = []
+    
+    # Process dataset
+    for i, item in enumerate(tqdm(dataset, desc="Evaluating KNN")):
+        if dataset_name == "hh-rlhf":
+            # Process both chosen and rejected
+            text_chosen, is_safe_chosen = map_hh_rlhf_to_safe_unsafe(item, use_chosen=True)
+            result_chosen = evaluate_text(text_chosen, threshold=threshold, use_knn=True)
+            predictions.append(result_chosen['is_safe'])
+            ground_truth.append(is_safe_chosen)
+            confidences.append(result_chosen['average_confidence'])
+            
+            if len(predictions) < limit * 2:
+                text_rejected, is_safe_rejected = map_hh_rlhf_to_safe_unsafe(item, use_chosen=False)
+                result_rejected = evaluate_text(text_rejected, threshold=threshold, use_knn=True)
+                predictions.append(result_rejected['is_safe'])
+                ground_truth.append(is_safe_rejected)
+                confidences.append(result_rejected['average_confidence'])
+        else:
+            text = item.get(config["text_field"], str(item))
+            if "label_field" in config:
+                is_safe = item.get(config["label_field"], True)
+            elif "default_label" in config:
+                is_safe = config["default_label"]
+            else:
+                is_safe = True  # Default
+            
+            result = evaluate_text(text, threshold=threshold, use_knn=True)
+            predictions.append(result['is_safe'])
+            ground_truth.append(is_safe)
+            confidences.append(result['average_confidence'])
+        
+        if limit and len(predictions) >= limit:
+            break
+    
+    if not predictions:
+        return {"error": "No predictions generated"}
+    
+    # Calculate metrics
+    accuracy = accuracy_score(ground_truth, predictions)
+    precision, recall, f1, support = precision_recall_fscore_support(
+        ground_truth, predictions, average='binary', pos_label=True, zero_division=0
+    )
+    
+    cm = confusion_matrix(ground_truth, predictions, labels=[True, False])
+    avg_confidence = sum(confidences) / len(confidences)
+    
+    return {
+        "model": "KNN Aggregator",
+        "dataset": dataset_name,
+        "total_examples": len(predictions),
+        "metrics": {
+            "accuracy": float(accuracy),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1_score": float(f1),
+            "avg_confidence": float(avg_confidence),
+        },
+        "confusion_matrix": {
+            "true_positive": int(cm[0][0]),
+            "false_positive": int(cm[0][1]),
+            "false_negative": int(cm[1][0]),
+            "true_negative": int(cm[1][1]),
+        },
+    }
+
+
 def evaluate_granite(
     dataset_name: str,
     limit: int = 100,
@@ -257,25 +356,42 @@ def compare_knn_vs_granite(
     knn_reference_path: Optional[str] = None,
     threshold: float = 0.7,
 ) -> Dict[str, Any]:
-    """Compare KNN aggregator vs IBM Granite model."""
+    """Compare KNN aggregator vs IBM Granite model on benchmark dataset.
+    
+    This function:
+    1. Loads KNN reference data
+    2. Loads Granite model
+    3. Evaluates both models in parallel on the same benchmark dataset
+    4. Compares results
+    """
     print(f"\n{'='*60}")
     print(f"COMPARING KNN AGGREGATOR vs IBM GRANITE-4.0-H-TINY")
     print(f"{'='*60}")
     
-    # Load Granite model
-    print("\n[1/3] Loading IBM Granite model...")
-    tokenizer, model = load_granite_model()
-    
-    # Load KNN reference data
+    # Step 1: Load KNN reference data
     if knn_reference_path:
-        print(f"\n[2/3] Loading KNN reference data from: {knn_reference_path}")
+        print(f"\n[1/3] Loading KNN reference data from: {knn_reference_path}")
         if not Path(knn_reference_path).exists():
             knn_reference_path = Path(__file__).parent / knn_reference_path
         load_knn_reference_data(str(knn_reference_path))
         print("✅ KNN reference data loaded")
+    else:
+        # Try default path
+        default_path = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
+        if default_path.exists():
+            print(f"\n[1/3] Loading KNN reference data from default path: {default_path}")
+            load_knn_reference_data(str(default_path))
+            print("✅ KNN reference data loaded")
+        else:
+            print("⚠️  Warning: KNN reference data not found. KNN aggregator may not work correctly.")
     
-    # Evaluate Granite
-    print("\n[3/3] Evaluating IBM Granite model...")
+    # Step 2: Load Granite model
+    print("\n[2/3] Loading IBM Granite model...")
+    tokenizer, model = load_granite_model()
+    
+    # Step 3: Parallel evaluation on benchmark dataset
+    print("\n[3/3] Evaluating both models on benchmark dataset...")
+    print("  - Evaluating IBM Granite...")
     results_granite = evaluate_granite(
         dataset_name=dataset_name,
         limit=limit,
@@ -283,14 +399,10 @@ def compare_knn_vs_granite(
         model=model,
     )
     
-    # Evaluate KNN
-    print("\n[3/3] Evaluating KNN Aggregator...")
-    from aggregator.evaluate_aggregator import evaluate_aggregator
-    results_knn = evaluate_aggregator(
+    print("  - Evaluating KNN Aggregator...")
+    results_knn = evaluate_knn_aggregator(
         dataset_name=dataset_name,
         limit=limit,
-        knn_reference_path=knn_reference_path,
-        use_knn=True,
         threshold=threshold,
     )
     
