@@ -43,6 +43,13 @@ except ImportError:
     WEIGHTED_AGGREGATOR_AVAILABLE = False
     evaluate_text_weighted = None
 
+try:
+    from granite_guardian.granite_guardian_wrapper import evaluate_text as evaluate_text_granite
+    GRANITE_AVAILABLE = True
+except ImportError:
+    GRANITE_AVAILABLE = False
+    evaluate_text_granite = None
+
 # HuggingFace authentication
 try:
     from huggingface_hub import login, whoami
@@ -520,7 +527,7 @@ def get_evaluate_function(aggregator_type: str = 'weighted'):
     Get the evaluate_text function for the specified aggregator type.
     
     Args:
-        aggregator_type: 'base' or 'weighted'
+        aggregator_type: 'base', 'weighted', or 'granite'
         
     Returns:
         The evaluate_text function
@@ -533,8 +540,12 @@ def get_evaluate_function(aggregator_type: str = 'weighted'):
         if not WEIGHTED_AGGREGATOR_AVAILABLE:
             raise ValueError("Weighted aggregator not available")
         return evaluate_text_weighted
+    elif aggregator_type == 'granite':
+        if not GRANITE_AVAILABLE:
+            raise ValueError("Granite Guardian not available. Install dependencies: pip install transformers torch vllm")
+        return evaluate_text_granite
     else:
-        raise ValueError(f"Unknown aggregator type: {aggregator_type}. Must be 'base' or 'weighted'")
+        raise ValueError(f"Unknown aggregator type: {aggregator_type}. Must be 'base', 'weighted', or 'granite'")
 
 
 def evaluate_on_benchmark(
@@ -554,7 +565,7 @@ def evaluate_on_benchmark(
         limit: Maximum number of examples to evaluate
         threshold: Confidence threshold for flagging
         verbose: Whether to print progress
-        aggregator: Aggregator type to use ('base' or 'weighted', default: 'weighted')
+        aggregator: Aggregator type to use ('base', 'weighted', or 'granite', default: 'weighted')
         
     Returns:
         Dictionary with evaluation results
@@ -743,7 +754,7 @@ def run_all_benchmarks(
         limit: Maximum number of examples per benchmark
         threshold: Confidence threshold for flagging
         save_results: Whether to save results to JSON file
-        aggregator: Aggregator type to use ('base' or 'weighted', default: 'weighted')
+        aggregator: Aggregator type to use ('base', 'weighted', or 'granite', default: 'weighted')
         
     Returns:
         List of results dictionaries
@@ -844,6 +855,9 @@ Examples:
   # Run with base aggregator
   python benchmark/run_benchmark.py --benchmark HarmBench --aggregator base --limit 100
   
+  # Run with Granite Guardian model
+  python benchmark/run_benchmark.py --benchmark HarmBench --aggregator granite --limit 100
+  
   # Run all benchmarks with weighted aggregator
   python benchmark/run_benchmark.py --all --limit 100
   
@@ -895,9 +909,9 @@ Examples:
     parser.add_argument(
         "--aggregator",
         type=str,
-        choices=['base', 'weighted'],
+        choices=['base', 'weighted', 'granite'],
         default='weighted',
-        help="Aggregator type to use: 'base' (threshold-based) or 'weighted' (weighted sum, default)"
+        help="Aggregator type to use: 'base' (threshold-based), 'weighted' (weighted sum, default), or 'granite' (IBM Granite Guardian)"
     )
     
     args = parser.parse_args()
