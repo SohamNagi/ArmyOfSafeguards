@@ -3,13 +3,14 @@
 
 This script automates the complete workflow for KNN aggregator:
 1. Generate KNN reference data from HH-RLHF dataset
-2. Evaluate aggregator performance (KNN vs Majority Vote)
+2. Evaluate aggregator performance (KNN vs Majority Vote or vs IBM Granite)
 3. Display comparison results
 
 Usage:
     python aggregator/knn_workflow.py
     python aggregator/knn_workflow.py --skip-generation  # Skip step 1 if data already exists
     python aggregator/knn_workflow.py --limit 200 --threshold 0.7
+    python aggregator/knn_workflow.py --compare-granite  # Compare with IBM Granite instead
 """
 import sys
 import subprocess
@@ -190,6 +191,11 @@ Examples:
         default=None,
         help="Directory to save results (default: aggregator/)",
     )
+    parser.add_argument(
+        "--compare-granite",
+        action="store_true",
+        help="Compare with IBM Granite-4.0-H-Tiny instead of Majority Vote",
+    )
     
     args = parser.parse_args()
     
@@ -226,12 +232,39 @@ Examples:
             print("Consider running without --skip-generation to generate it")
     
     # Step 2: Evaluate performance
-    success = evaluate_performance(
-        reference_file=args.reference_file,
-        limit=args.limit,
-        threshold=args.threshold,
-        compare=not args.no_compare,
-    )
+    if args.compare_granite:
+        # Compare with IBM Granite
+        print("\n" + "="*60)
+        print("Comparing with IBM Granite-4.0-H-Tiny")
+        print("="*60)
+        script_path = Path(__file__).parent / "evaluate_vs_granite.py"
+        cmd = [
+            sys.executable,
+            str(script_path),
+            "--dataset", "hh-rlhf",
+            "--limit", str(args.limit),
+            "--threshold", str(args.threshold),
+        ]
+        if args.reference_file:
+            cmd.extend(["--knn-reference", str(args.reference_file)])
+        else:
+            default_ref = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
+            if default_ref.exists():
+                cmd.extend(["--knn-reference", str(default_ref)])
+        
+        success = run_command(
+            cmd,
+            "Step 2: Evaluating KNN vs IBM Granite",
+            check=False
+        )
+    else:
+        # Compare with Majority Vote (default)
+        success = evaluate_performance(
+            reference_file=args.reference_file,
+            limit=args.limit,
+            threshold=args.threshold,
+            compare=not args.no_compare,
+        )
     
     if success:
         print("\n" + "="*60)
