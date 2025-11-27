@@ -11,6 +11,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
+import torch
 from datasets import load_dataset
 from tqdm import tqdm
 
@@ -19,8 +20,119 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # Add current directory to path for local imports
 sys.path.insert(0, str(Path(__file__).parent))
 
+# Check for GPU availability (will be set by parse_args if --use-cpu is provided)
+USE_GPU = None  # Will be determined later
+DEVICE = None  # Will be set later
+
 # Import aggregator functions
 from aggregator import run_all_safeguards
+
+# Configure safeguards to use GPU
+def setup_safeguards_for_gpu(force_cpu: bool = False):
+    """Move safeguard models to GPU and patch predict functions to use GPU."""
+    global DEVICE
+    
+    # Determine device
+    if force_cpu or not torch.cuda.is_available():
+        DEVICE = torch.device("cpu")
+        if force_cpu:
+            print("ℹ️  CPU mode forced by --use-cpu flag")
+        else:
+            print("⚠️  CUDA not available - Using CPU (slower)")
+        return
+    
+    DEVICE = torch.device("cuda")
+    print(f"✅ CUDA available - Using GPU: {torch.cuda.get_device_name(0)}")
+    print(f"   GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.2f} GB")
+    
+    try:
+        # Move factuality model to GPU
+        from factuality import safeguard_factuality
+        if hasattr(safeguard_factuality, '_model'):
+            safeguard_factuality._model = safeguard_factuality._model.to(DEVICE)
+            # Patch predict to move inputs to GPU
+            original_predict = safeguard_factuality.predict
+            def gpu_predict_factuality(text: str):
+                inputs = safeguard_factuality._tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+                inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+                with torch.no_grad():
+                    outputs = safeguard_factuality._model(**inputs)
+                logits = outputs.logits[0]
+                probabilities = torch.softmax(logits, dim=-1)
+                confidence, label_id = torch.max(probabilities, dim=-1)
+                label = safeguard_factuality._model.config.id2label.get(label_id.item(), str(label_id.item()))
+                return {"label": label, "confidence": float(confidence.item())}
+            safeguard_factuality.predict = gpu_predict_factuality
+            print("✅ Factuality safeguard configured for GPU")
+    except Exception as e:
+        print(f"⚠️  Could not configure factuality model for GPU: {e}")
+    
+    try:
+        # Move toxicity model to GPU
+        from toxicity import safeguard_toxicity
+        if hasattr(safeguard_toxicity, '_model'):
+            safeguard_toxicity._model = safeguard_toxicity._model.to(DEVICE)
+            original_predict = safeguard_toxicity.predict
+            def gpu_predict_toxicity(text: str):
+                inputs = safeguard_toxicity._tokenizer(text, return_tensors="pt", truncation=True, max_length=512)
+                inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+                with torch.no_grad():
+                    outputs = safeguard_toxicity._model(**inputs)
+                logits = outputs.logits[0]
+                probabilities = torch.softmax(logits, dim=-1)
+                confidence, label_id = torch.max(probabilities, dim=-1)
+                label = safeguard_toxicity._model.config.id2label.get(label_id.item(), str(label_id.item()))
+                return {"label": label, "confidence": float(confidence.item())}
+            safeguard_toxicity.predict = gpu_predict_toxicity
+            print("✅ Toxicity safeguard configured for GPU")
+    except Exception as e:
+        print(f"⚠️  Could not configure toxicity model for GPU: {e}")
+    
+    try:
+        # Move sexual content model to GPU
+        from sexual import safeguard_sexual
+        if hasattr(safeguard_sexual, '_model'):
+            safeguard_sexual._model = safeguard_sexual._model.to(DEVICE)
+            original_predict = safeguard_sexual.predict
+            def gpu_predict_sexual(text: str):
+                inputs = safeguard_sexual._tokenizer(text, return_tensors="pt", truncation=True, max_length=128)
+                inputs = {k: v.to(DEVICE) for k, v in inputs.items()}
+                with torch.no_grad():
+                    outputs = safeguard_sexual._model(**inputs)
+                logits = outputs.logits[0]
+                probabilities = torch.softmax(logits, dim=-1)
+                confidence, label_id = torch.max(probabilities, dim=-1)
+                label = safeguard_sexual._model.config.id2label.get(label_id.item(), str(label_id.item()))
+                return {"label": label, "confidence": float(confidence.item())}
+            safeguard_sexual.predict = gpu_predict_sexual
+            print("✅ Sexual content safeguard configured for GPU")
+    except Exception as e:
+        print(f"⚠️  Could not configure sexual model for GPU: {e}")
+    
+    try:
+        # Move jailbreak model to GPU
+        from jailbreak import safeguard_jailbreak
+        if hasattr(safeguard_jailbreak, 'model'):
+            safeguard_jailbreak.model = safeguard_jailbreak.model.to(DEVICE)
+            original_predict = safeguard_jailbreak.predict
+            def gpu_predict_jailbreak(text: str):
+                enc = safeguard_jailbreak.tok(text, return_tensors="pt", truncation=True, max_length=384)
+                enc = {k: v.to(DEVICE) for k, v in enc.items()}
+                with torch.no_grad():
+                    logits = safeguard_jailbreak.model(**enc).logits
+                    probs = torch.softmax(logits, dim=-1).squeeze()
+                    pred_id = torch.argmax(probs).item()
+                    confidence = probs[pred_id].item()
+                return {
+                    "label": bool(pred_id),
+                    "confidence": confidence,
+                }
+            safeguard_jailbreak.predict = gpu_predict_jailbreak
+            print("✅ Jailbreak safeguard configured for GPU")
+    except Exception as e:
+        print(f"⚠️  Could not configure jailbreak model for GPU: {e}")
+
+# Note: GPU setup will be called in main() after parsing args
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,6 +168,11 @@ def parse_args() -> argparse.Namespace:
         "--subset",
         default="harmless-base",
         help="Data directory (subset) passed to load_dataset.",
+    )
+    parser.add_argument(
+        "--use-cpu",
+        action="store_true",
+        help="Force CPU usage even if CUDA is available (slower but uses less memory).",
     )
     return parser.parse_args()
 
@@ -201,11 +318,15 @@ def process_split(
 
 def main() -> None:
     args = parse_args()
+    
+    # Setup GPU for safeguards (must be done after imports)
+    setup_safeguards_for_gpu(force_cpu=args.use_cpu)
+    
     # Ensure output directory exists (use parent of output file if needed)
     args.output_file.parent.mkdir(parents=True, exist_ok=True)
     args.checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading Anthropic/hh-rlhf dataset (subset='{args.subset}', split='{args.split}')...")
+    print(f"\nLoading Anthropic/hh-rlhf dataset (subset='{args.subset}', split='{args.split}')...")
     print(f"Output will be saved to: {args.output_file.absolute()}")
     print(f"Checkpoint will be saved to: {args.checkpoint_file.absolute()}")
     dataset = load_dataset("Anthropic/hh-rlhf", data_dir=args.subset, split=args.split)
