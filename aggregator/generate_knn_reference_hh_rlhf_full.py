@@ -91,15 +91,29 @@ def load_checkpoint(path: Path, total: int) -> Tuple[Dict[str, Any], bool]:
         "rejected_index": 0,
         "phase": "chosen",
         "total": total,
+        "pending_records": [],
     }, False
 
 
-def save_checkpoint(path: Path, state: Dict[str, Any]) -> None:
+def save_checkpoint(path: Path, state: Dict[str, Any], verbose: bool = True) -> None:
     path.write_text(json.dumps(state, indent=2), encoding="utf-8")
-    print(
-        f"💾 Checkpoint saved → {path} "
-        f"(chosen={state.get('chosen_index', 0)}, rejected={state.get('rejected_index', 0)})"
-    )
+    if verbose:
+        print(
+            f"💾 Checkpoint saved → {path} "
+            f"(chosen={state.get('chosen_index', 0)}, rejected={state.get('rejected_index', 0)})"
+        )
+
+
+def flush_pending_records(state: Dict[str, Any], output_path: Path, verbose: bool = True) -> None:
+    pending = state.get("pending_records") or []
+    if not pending:
+        return
+    with open(output_path, "a", encoding="utf-8") as handle:
+        for record in pending:
+            handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+    if verbose:
+        print(f"➡️  Restored {len(pending)} pending records from the previous run into {output_path}")
+    state["pending_records"] = []
 
 
 class BatchedWriter:
@@ -145,6 +159,7 @@ def process_split(
 ) -> None:
     total = len(dataset)
     start_idx = min(state.get(f"{state_key}_index", 0), total)
+    state.setdefault("pending_records", [])
 
     if start_idx >= total:
         print(f"⏭️  {desc} already completed according to checkpoint.")
@@ -157,25 +172,29 @@ def process_split(
         for idx in progress:
             text = dataset[idx][text_key]
             results = run_all_safeguards(text)
-            writer.add(build_record(text, is_safe, source, results))
+            record = build_record(text, is_safe, source, results)
+            writer.add(record)
 
             state["phase"] = state_key
             state[f"{state_key}_index"] = idx + 1
+            state["pending_records"].append(record)
+            save_checkpoint(checkpoint_path, state, verbose=False)
 
             if writer.maybe_flush():
-                save_checkpoint(checkpoint_path, state)
+                state["pending_records"] = []
+                save_checkpoint(checkpoint_path, state, verbose=False)
     except KeyboardInterrupt:
         print(f"\n🛑 Interrupted while processing {desc}.")
-        writer.flush()
+        if writer.flush():
+            state["pending_records"] = []
         save_checkpoint(checkpoint_path, state)
         raise
 
     if writer.flush():
-        save_checkpoint(checkpoint_path, state)
-    else:
-        # Still persist the latest index even if nothing new was flushed.
-        save_checkpoint(checkpoint_path, state)
+        state["pending_records"] = []
 
+    # Still persist the latest index even if nothing new was flushed.
+    save_checkpoint(checkpoint_path, state)
     state[f"{state_key}_complete"] = True
 
 
@@ -191,6 +210,11 @@ def main() -> None:
     )
 
     checkpoint_state, resume = load_checkpoint(args.checkpoint_file, total)
+    checkpoint_state.setdefault("pending_records", [])
+    if resume and checkpoint_state["pending_records"]:
+        flush_pending_records(checkpoint_state, args.output_file)
+        save_checkpoint(args.checkpoint_file, checkpoint_state, verbose=False)
+
     writer = BatchedWriter(args.output_file, args.batch_size, resume)
 
     completed = False
@@ -226,7 +250,8 @@ def main() -> None:
     except KeyboardInterrupt:
         print("Progress saved. Re-run the script to resume from the last checkpoint.")
     finally:
-        writer.flush()
+        if writer.flush():
+            checkpoint_state["pending_records"] = []
         if completed and args.checkpoint_file.exists():
             args.checkpoint_file.unlink()
             print(f"✅ Completed! Reference dataset saved to {args.output_file}")
