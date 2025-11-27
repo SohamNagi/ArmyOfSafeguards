@@ -1,14 +1,18 @@
-"""Generate KNN reference data from Anthropic HH-RLHF dataset.
+"""Generate KNN reference data from Anthropic HH-RLHF with checkpoints.
 
-This script processes the HH-RLHF dataset and generates reference data
-for the KNN aggregator by running all safeguards on the dataset.
+This script streams the HH-RLHF dataset, runs every safeguard, and writes
+reference rows in configurable batches. Progress is persisted so that long
+runs can be resumed without losing already processed samples.
 """
+
+import argparse
 import json
 import sys
 from pathlib import Path
+from typing import Any, Dict, List, Tuple
+
 from datasets import load_dataset
 from tqdm import tqdm
-import numpy as np
 
 # Add parent directory to path so we can import aggregator and safeguards
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -18,80 +22,228 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Import aggregator functions
 from aggregator import run_all_safeguards
 
-# Load Anthropic HH-RLHF dataset (harmless-base subset for clean labels)
-print("Loading Anthropic/hh-rlhf dataset (harmless-base subset)...")
-dataset = load_dataset("Anthropic/hh-rlhf", data_dir="harmless-base", split="train")
 
-# Prepare output file (saved in aggregator directory)
-output_file = Path(__file__).parent / "knn_reference_hh_rlhf_full.jsonl"
-total = len(dataset)
+def parse_args() -> argparse.Namespace:
+    script_dir = Path(__file__).parent
+    parser = argparse.ArgumentParser(
+        description="Generate KNN reference data with batching and checkpoints.",
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=64,
+        help="Number of samples to write before flushing to disk and checkpointing.",
+    )
+    parser.add_argument(
+        "--checkpoint-file",
+        type=Path,
+        default=script_dir / "knn_reference_hh_rlhf_full.checkpoint.json",
+        help="Path to checkpoint progress for resuming long runs.",
+    )
+    parser.add_argument(
+        "--output-file",
+        type=Path,
+        default=script_dir / "knn_reference_hh_rlhf_full.jsonl",
+        help="JSONL file that receives the reference dataset.",
+    )
+    parser.add_argument(
+        "--split",
+        default="train",
+        help="Dataset split to load from Anthropic/hh-rlhf.",
+    )
+    parser.add_argument(
+        "--subset",
+        default="harmless-base",
+        help="Data directory (subset) passed to load_dataset.",
+    )
+    return parser.parse_args()
 
-print(f"Processing {total} samples with 4 safeguard models...")
 
-# Process chosen responses (typically safe)
-with open(output_file, "w", encoding="utf-8") as f:
-    for item in tqdm(dataset, total=total, desc="Processing chosen responses"):
-        text = item["chosen"]  # chosen responses are preferred by humans (typically safe)
-        
-        # Run all safeguards to get 4 confidence values
-        results = run_all_safeguards(text)
+def safe_confidence(results: Dict[str, Any], key: str) -> float:
+    block = results.get(key, {})
+    if isinstance(block, dict) and "error" not in block:
+        return float(block.get("confidence", 0.0))
+    return 0.0
 
-        # Extract 4 confidence values (order must match KNN aggregator!)
-        # Order: factuality, toxicity, sexual, jailbreak
-        conf_fact = results.get("factuality", {}).get("confidence", 0.0) if "error" not in results.get("factuality", {}) else 0.0
-        conf_tox  = results.get("toxicity", {}).get("confidence", 0.0) if "error" not in results.get("toxicity", {}) else 0.0
-        conf_sex  = results.get("sexual", {}).get("confidence", 0.0) if "error" not in results.get("sexual", {}) else 0.0
-        conf_jb   = results.get("jailbreak", {}).get("confidence", 0.0) if "error" not in results.get("jailbreak", {}) else 0.0
 
-        # Label mapping: chosen = safe, rejected = unsafe
-        # Using chosen responses as safe samples
-        is_safe = True  # harmless-base chosen responses are all safe
+def build_record(text: str, is_safe: bool, source: str, results: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "text": text,
+        "conf_fact": round(safe_confidence(results, "factuality"), 4),
+        "conf_tox": round(safe_confidence(results, "toxicity"), 4),
+        "conf_sex": round(safe_confidence(results, "sexual"), 4),
+        "conf_jb": round(safe_confidence(results, "jailbreak"), 4),
+        "is_safe": is_safe,
+        "source": source,
+    }
 
-        record = {
-            "text": text,
-            "conf_fact": round(float(conf_fact), 4),
-            "conf_tox":  round(float(conf_tox),  4),
-            "conf_sex":  round(float(conf_sex),  4),
-            "conf_jb":   round(float(conf_jb),   4),
-            "is_safe": is_safe,
-            "source": "hh-rlhf-harmless-chosen"
-        }
 
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+def load_checkpoint(path: Path, total: int) -> Tuple[Dict[str, Any], bool]:
+    if path.exists():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            print(f"🔁 Resuming from checkpoint at {path}")
+            return data, True
+        except json.JSONDecodeError:
+            print("⚠️ Checkpoint file is corrupted; starting from scratch.")
+    return {
+        "chosen_index": 0,
+        "rejected_index": 0,
+        "phase": "chosen",
+        "total": total,
+    }, False
 
-print(f"✅ Completed processing chosen responses. Saved to: {output_file}")
 
-# Process rejected responses (unsafe samples)
-print("Processing rejected responses (unsafe samples)...")
-with open(output_file, "a", encoding="utf-8") as f:
-    for item in tqdm(dataset, total=total, desc="Processing rejected responses"):
-        text = item["rejected"]  # rejected responses are typically unsafe
+def save_checkpoint(path: Path, state: Dict[str, Any]) -> None:
+    path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+    print(
+        f"💾 Checkpoint saved → {path} "
+        f"(chosen={state.get('chosen_index', 0)}, rejected={state.get('rejected_index', 0)})"
+    )
 
-        results = run_all_safeguards(text)
-        # Order: factuality, toxicity, sexual, jailbreak
-        conf_fact = results.get("factuality", {}).get("confidence", 0.0) if "error" not in results.get("factuality", {}) else 0.0
-        conf_tox  = results.get("toxicity", {}).get("confidence", 0.0) if "error" not in results.get("toxicity", {}) else 0.0
-        conf_sex  = results.get("sexual", {}).get("confidence", 0.0) if "error" not in results.get("sexual", {}) else 0.0
-        conf_jb   = results.get("jailbreak", {}).get("confidence", 0.0) if "error" not in results.get("jailbreak", {}) else 0.0
 
-        record = {
-            "text": text,
-            "conf_fact": round(float(conf_fact), 4),
-            "conf_tox":  round(float(conf_tox),  4),
-            "conf_sex":  round(float(conf_sex),  4),
-            "conf_jb":   round(float(conf_jb),   4),
-            "is_safe": False,  # rejected responses are typically unsafe
-            "source": "hh-rlhf-harmless-rejected"
-        }
-        f.write(json.dumps(record, ensure_ascii=False) + "\n")
+class BatchedWriter:
+    def __init__(self, output_path: Path, batch_size: int, resume: bool) -> None:
+        self.output_path = output_path
+        self.batch_size = max(batch_size, 1)
+        self.buffer: List[Dict[str, Any]] = []
+        self._mode = "a" if resume and output_path.exists() else "w"
 
-print(f"✅ Completed! Final reference dataset: {output_file}, approximately {total * 2} samples")
+    def add(self, record: Dict[str, Any]) -> None:
+        self.buffer.append(record)
 
-# Note: KNN reference data has been saved
-print("\n" + "="*60)
-print("KNN Reference Data Generation Complete")
-print("="*60)
-print(f"Reference data file: {output_file}")
-print("\nTo load the reference data, use:")
-print("  from aggregator.aggregator import load_knn_reference_data")
-print(f"  load_knn_reference_data('{output_file}')")
+    def maybe_flush(self) -> bool:
+        if len(self.buffer) >= self.batch_size:
+            self._flush()
+            return True
+        return False
+
+    def flush(self) -> bool:
+        if not self.buffer:
+            return False
+        self._flush()
+        return True
+
+    def _flush(self) -> None:
+        with open(self.output_path, self._mode, encoding="utf-8") as handle:
+            for record in self.buffer:
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+        self.buffer.clear()
+        self._mode = "a"
+
+
+def process_split(
+    dataset,
+    text_key: str,
+    is_safe: bool,
+    source: str,
+    desc: str,
+    state: Dict[str, Any],
+    state_key: str,
+    writer: BatchedWriter,
+    checkpoint_path: Path,
+) -> None:
+    total = len(dataset)
+    start_idx = min(state.get(f"{state_key}_index", 0), total)
+
+    if start_idx >= total:
+        print(f"⏭️  {desc} already completed according to checkpoint.")
+        state[f"{state_key}_complete"] = True
+        return
+
+    progress = tqdm(range(start_idx, total), total=total - start_idx, desc=desc)
+
+    try:
+        for idx in progress:
+            text = dataset[idx][text_key]
+            results = run_all_safeguards(text)
+            writer.add(build_record(text, is_safe, source, results))
+
+            state["phase"] = state_key
+            state[f"{state_key}_index"] = idx + 1
+
+            if writer.maybe_flush():
+                save_checkpoint(checkpoint_path, state)
+    except KeyboardInterrupt:
+        print(f"\n🛑 Interrupted while processing {desc}.")
+        writer.flush()
+        save_checkpoint(checkpoint_path, state)
+        raise
+
+    if writer.flush():
+        save_checkpoint(checkpoint_path, state)
+    else:
+        # Still persist the latest index even if nothing new was flushed.
+        save_checkpoint(checkpoint_path, state)
+
+    state[f"{state_key}_complete"] = True
+
+
+def main() -> None:
+    args = parse_args()
+    script_dir = Path(__file__).parent
+
+    print(f"Loading Anthropic/hh-rlhf dataset (subset='{args.subset}', split='{args.split}')...")
+    dataset = load_dataset("Anthropic/hh-rlhf", data_dir=args.subset, split=args.split)
+    total = len(dataset)
+    print(
+        f"Processing {total} prompt pairs (~{total * 2} responses) with batch size {args.batch_size}."
+    )
+
+    checkpoint_state, resume = load_checkpoint(args.checkpoint_file, total)
+    writer = BatchedWriter(args.output_file, args.batch_size, resume)
+
+    completed = False
+    try:
+        process_split(
+            dataset=dataset,
+            text_key="chosen",
+            is_safe=True,
+            source="hh-rlhf-harmless-chosen",
+            desc="Chosen responses (safe)",
+            state=checkpoint_state,
+            state_key="chosen",
+            writer=writer,
+            checkpoint_path=args.checkpoint_file,
+        )
+
+        process_split(
+            dataset=dataset,
+            text_key="rejected",
+            is_safe=False,
+            source="hh-rlhf-harmless-rejected",
+            desc="Rejected responses (unsafe)",
+            state=checkpoint_state,
+            state_key="rejected",
+            writer=writer,
+            checkpoint_path=args.checkpoint_file,
+        )
+
+        completed = (
+            checkpoint_state.get("chosen_index", 0) >= total
+            and checkpoint_state.get("rejected_index", 0) >= total
+        )
+    except KeyboardInterrupt:
+        print("Progress saved. Re-run the script to resume from the last checkpoint.")
+    finally:
+        writer.flush()
+        if completed and args.checkpoint_file.exists():
+            args.checkpoint_file.unlink()
+            print(f"✅ Completed! Reference dataset saved to {args.output_file}")
+            print("Checkpoint file removed because processing finished successfully.")
+        elif not completed:
+            # Ensure the latest state is persisted when exiting early.
+            save_checkpoint(args.checkpoint_file, checkpoint_state)
+            print(f"➡️  Partial progress stored in {args.checkpoint_file}")
+
+    print("\n" + "=" * 60)
+    print("KNN Reference Data Generation Complete" if completed else "KNN Data Generation Paused")
+    print("=" * 60)
+    print(f"Reference data file: {args.output_file}")
+    print("\nTo load the reference data, use:")
+    print("  from aggregator.aggregator import load_knn_reference_data")
+    print(f"  load_knn_reference_data('{args.output_file}')")
+
+
+if __name__ == "__main__":
+    main()
