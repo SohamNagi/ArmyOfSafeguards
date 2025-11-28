@@ -28,8 +28,34 @@ from sklearn.metrics import (
     classification_report
 )
 
-# Import aggregator
-from aggregator.aggregator import evaluate_text
+# Import aggregators - will be dynamically selected
+try:
+    from aggregator.base_aggregator import evaluate_text as evaluate_text_base
+    BASE_AGGREGATOR_AVAILABLE = True
+except ImportError:
+    BASE_AGGREGATOR_AVAILABLE = False
+    evaluate_text_base = None
+
+try:
+    from aggregator.weighted_aggregator import evaluate_text as evaluate_text_weighted
+    WEIGHTED_AGGREGATOR_AVAILABLE = True
+except ImportError:
+    WEIGHTED_AGGREGATOR_AVAILABLE = False
+    evaluate_text_weighted = None
+
+try:
+    from granite_guardian.granite_guardian_wrapper import evaluate_text as evaluate_text_granite
+    GRANITE_AVAILABLE = True
+except ImportError:
+    GRANITE_AVAILABLE = False
+    evaluate_text_granite = None
+
+try:
+    from shieldgemma.shieldgemma_wrapper import evaluate_text as evaluate_text_shieldgemma
+    SHIELDGEMMA_AVAILABLE = True
+except ImportError:
+    SHIELDGEMMA_AVAILABLE = False
+    evaluate_text_shieldgemma = None
 
 # HuggingFace authentication
 try:
@@ -503,13 +529,44 @@ def load_benchmark_dataset(benchmark_name: str, limit: Optional[int] = None, hf_
             raise
 
 
+def get_evaluate_function(aggregator_type: str = 'weighted'):
+    """
+    Get the evaluate_text function for the specified aggregator type.
+    
+    Args:
+        aggregator_type: 'base', 'weighted', 'granite', or 'shieldgemma'
+        
+    Returns:
+        The evaluate_text function
+    """
+    if aggregator_type == 'base':
+        if not BASE_AGGREGATOR_AVAILABLE:
+            raise ValueError("Base aggregator not available")
+        return evaluate_text_base
+    elif aggregator_type == 'weighted':
+        if not WEIGHTED_AGGREGATOR_AVAILABLE:
+            raise ValueError("Weighted aggregator not available")
+        return evaluate_text_weighted
+    elif aggregator_type == 'granite':
+        if not GRANITE_AVAILABLE:
+            raise ValueError("Granite Guardian not available. Install dependencies: pip install transformers torch vllm")
+        return evaluate_text_granite
+    elif aggregator_type == 'shieldgemma':
+        if not SHIELDGEMMA_AVAILABLE:
+            raise ValueError("ShieldGemma not available. Install dependencies: pip install transformers[accelerate] torch")
+        return evaluate_text_shieldgemma
+    else:
+        raise ValueError(f"Unknown aggregator type: {aggregator_type}. Must be 'base', 'weighted', 'granite', or 'shieldgemma'")
+
+
 def evaluate_on_benchmark(
     benchmark_name: str,
     limit: Optional[int] = None,
     threshold: float = 0.5,
     verbose: bool = True,
     hf_token: Optional[str] = None,
-    config_override: Optional[str] = None
+    config_override: Optional[str] = None,
+    aggregator: str = 'weighted'
 ) -> Dict[str, Any]:
     """
     Evaluate the safeguarding system on a benchmark dataset.
@@ -519,13 +576,24 @@ def evaluate_on_benchmark(
         limit: Maximum number of examples to evaluate
         threshold: Confidence threshold for flagging
         verbose: Whether to print progress
+        aggregator: Aggregator type to use ('base', 'weighted', 'granite', or 'shieldgemma', default: 'weighted')
         
     Returns:
         Dictionary with evaluation results
     """
+    # Get the appropriate evaluate function
+    try:
+        evaluate_func = get_evaluate_function(aggregator)
+    except ValueError as e:
+        return {
+            "benchmark": benchmark_name,
+            "error": str(e)
+        }
+    
     if verbose:
         print(f"\n{'='*70}")
         print(f"Evaluating: {benchmark_name}")
+        print(f"Aggregator: {aggregator}")
         print(f"{BENCHMARKS[benchmark_name].get('note', '')}")
         print(f"{'='*70}")
     
@@ -560,8 +628,8 @@ def evaluate_on_benchmark(
         confidences = []
         individual_results = []
         
-        for text in tqdm(texts, disable=not verbose, desc="Evaluating"):
-            result = evaluate_text(text, threshold=threshold)
+        for text in tqdm(texts, disable=not verbose, desc=f"Evaluating ({aggregator})"):
+            result = evaluate_func(text, threshold=threshold)
             
             # Determine if content was flagged as unsafe
             is_flagged = not result['is_safe']
@@ -606,6 +674,7 @@ def evaluate_on_benchmark(
         
         results = {
             "benchmark": benchmark_name,
+            "aggregator": aggregator,
             "timestamp": datetime.now().isoformat(),
             "threshold": threshold,
             "total_examples": len(texts),
@@ -686,7 +755,8 @@ def run_all_benchmarks(
     limit: Optional[int] = None,
     threshold: float = 0.5,
     save_results: bool = True,
-    hf_token: Optional[str] = None
+    hf_token: Optional[str] = None,
+    aggregator: str = 'weighted'
 ) -> List[Dict[str, Any]]:
     """
     Run evaluation on all available benchmarks.
@@ -695,6 +765,7 @@ def run_all_benchmarks(
         limit: Maximum number of examples per benchmark
         threshold: Confidence threshold for flagging
         save_results: Whether to save results to JSON file
+        aggregator: Aggregator type to use ('base', 'weighted', 'granite', or 'shieldgemma', default: 'weighted')
         
     Returns:
         List of results dictionaries
@@ -703,6 +774,7 @@ def run_all_benchmarks(
     print("ARMY OF SAFEGUARDS - BENCHMARK EVALUATION")
     print("="*70)
     print(f"\nEvaluating on {len(BENCHMARKS)} benchmarks")
+    print(f"Aggregator: {aggregator}")
     if limit:
         print(f"Limit: {limit} examples per benchmark")
     print(f"Threshold: {threshold}")
@@ -716,7 +788,8 @@ def run_all_benchmarks(
             limit=limit,
             threshold=threshold,
             verbose=True,
-            hf_token=hf_token
+            hf_token=hf_token,
+            aggregator=aggregator
         )
         all_results.append(result)
     
@@ -760,11 +833,12 @@ def run_all_benchmarks(
     # Save results
     if save_results and successful:
         output_dir = Path(__file__).parent
-        output_file = output_dir / f"benchmark_results_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        output_file = output_dir / f"benchmark_results_{aggregator}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
         with open(output_file, 'w') as f:
             json.dump({
                 "timestamp": datetime.now().isoformat(),
                 "system": "Army of Safeguards (Aggregator)",
+                "aggregator": aggregator,
                 "threshold": threshold,
                 "limit_per_benchmark": limit,
                 "results": all_results,
@@ -786,14 +860,23 @@ if __name__ == "__main__":
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Run single benchmark
+  # Run single benchmark with weighted aggregator (default)
   python benchmark/run_benchmark.py --benchmark HarmBench --limit 100
   
-  # Run all benchmarks
+  # Run with base aggregator
+  python benchmark/run_benchmark.py --benchmark HarmBench --aggregator base --limit 100
+  
+  # Run with Granite Guardian model
+  python benchmark/run_benchmark.py --benchmark HarmBench --aggregator granite --limit 100
+  
+  # Run with ShieldGemma-2b model
+  python benchmark/run_benchmark.py --benchmark HarmBench --aggregator shieldgemma --limit 100
+  
+  # Run all benchmarks with weighted aggregator
   python benchmark/run_benchmark.py --all --limit 100
   
   # Custom threshold
-  python benchmark/run_benchmark.py --benchmark WildGuardMix --threshold 0.8
+  python benchmark/run_benchmark.py --benchmark WildGuardMix --threshold 0.8 --aggregator base
         """
     )
     
@@ -837,6 +920,13 @@ Examples:
         default=None,
         help="Override dataset config (e.g., for HarmBench: 'standard', 'contextual', or 'copyright')"
     )
+    parser.add_argument(
+        "--aggregator",
+        type=str,
+        choices=['base', 'weighted', 'granite', 'shieldgemma'],
+        default='weighted',
+        help="Aggregator type to use: 'base' (threshold-based), 'weighted' (weighted sum, default), 'granite' (IBM Granite Guardian), or 'shieldgemma' (Google ShieldGemma-2b)"
+    )
     
     args = parser.parse_args()
     
@@ -857,16 +947,18 @@ Examples:
             threshold=args.threshold,
             verbose=True,
             hf_token=hf_token,
-            config_override=args.config
+            config_override=args.config,
+            aggregator=args.aggregator
         )
         
         if not args.no_save and "error" not in result:
             output_dir = Path(__file__).parent
-            output_file = output_dir / f"benchmark_{args.benchmark.lower()}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            output_file = output_dir / f"benchmark_{args.benchmark.lower()}_{args.aggregator}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
             with open(output_file, 'w') as f:
                 json.dump({
                     "timestamp": datetime.now().isoformat(),
                     "system": "Army of Safeguards (Aggregator)",
+                    "aggregator": args.aggregator,
                     "threshold": args.threshold,
                     "result": result
                 }, f, indent=2)
@@ -877,6 +969,7 @@ Examples:
             limit=args.limit,
             threshold=args.threshold,
             save_results=not args.no_save,
-            hf_token=hf_token
+            hf_token=hf_token,
+            aggregator=args.aggregator
         )
 
