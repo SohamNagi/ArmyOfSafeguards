@@ -50,6 +50,13 @@ except ImportError:
     GRANITE_AVAILABLE = False
     evaluate_text_granite = None
 
+try:
+    from shieldgemma.shieldgemma_wrapper import evaluate_text as evaluate_text_shieldgemma
+    SHIELDGEMMA_AVAILABLE = True
+except ImportError:
+    SHIELDGEMMA_AVAILABLE = False
+    evaluate_text_shieldgemma = None
+
 # HuggingFace authentication
 try:
     from huggingface_hub import login, whoami
@@ -527,7 +534,7 @@ def get_evaluate_function(aggregator_type: str = 'weighted'):
     Get the evaluate_text function for the specified aggregator type.
     
     Args:
-        aggregator_type: 'base', 'weighted', or 'granite'
+        aggregator_type: 'base', 'weighted', 'granite', or 'shieldgemma'
         
     Returns:
         The evaluate_text function
@@ -544,8 +551,12 @@ def get_evaluate_function(aggregator_type: str = 'weighted'):
         if not GRANITE_AVAILABLE:
             raise ValueError("Granite Guardian not available. Install dependencies: pip install transformers torch vllm")
         return evaluate_text_granite
+    elif aggregator_type == 'shieldgemma':
+        if not SHIELDGEMMA_AVAILABLE:
+            raise ValueError("ShieldGemma not available. Install dependencies: pip install transformers[accelerate] torch")
+        return evaluate_text_shieldgemma
     else:
-        raise ValueError(f"Unknown aggregator type: {aggregator_type}. Must be 'base', 'weighted', or 'granite'")
+        raise ValueError(f"Unknown aggregator type: {aggregator_type}. Must be 'base', 'weighted', 'granite', or 'shieldgemma'")
 
 
 def evaluate_on_benchmark(
@@ -565,7 +576,7 @@ def evaluate_on_benchmark(
         limit: Maximum number of examples to evaluate
         threshold: Confidence threshold for flagging
         verbose: Whether to print progress
-        aggregator: Aggregator type to use ('base', 'weighted', or 'granite', default: 'weighted')
+        aggregator: Aggregator type to use ('base', 'weighted', 'granite', or 'shieldgemma', default: 'weighted')
         
     Returns:
         Dictionary with evaluation results
@@ -754,7 +765,7 @@ def run_all_benchmarks(
         limit: Maximum number of examples per benchmark
         threshold: Confidence threshold for flagging
         save_results: Whether to save results to JSON file
-        aggregator: Aggregator type to use ('base', 'weighted', or 'granite', default: 'weighted')
+        aggregator: Aggregator type to use ('base', 'weighted', 'granite', or 'shieldgemma', default: 'weighted')
         
     Returns:
         List of results dictionaries
@@ -858,6 +869,9 @@ Examples:
   # Run with Granite Guardian model
   python benchmark/run_benchmark.py --benchmark HarmBench --aggregator granite --limit 100
   
+  # Run with ShieldGemma-2b model
+  python benchmark/run_benchmark.py --benchmark HarmBench --aggregator shieldgemma --limit 100
+  
   # Run all benchmarks with weighted aggregator
   python benchmark/run_benchmark.py --all --limit 100
   
@@ -909,9 +923,9 @@ Examples:
     parser.add_argument(
         "--aggregator",
         type=str,
-        choices=['base', 'weighted', 'granite'],
+        choices=['base', 'weighted', 'granite', 'shieldgemma'],
         default='weighted',
-        help="Aggregator type to use: 'base' (threshold-based), 'weighted' (weighted sum, default), or 'granite' (IBM Granite Guardian)"
+        help="Aggregator type to use: 'base' (threshold-based), 'weighted' (weighted sum, default), 'granite' (IBM Granite Guardian), or 'shieldgemma' (Google ShieldGemma-2b)"
     )
     
     args = parser.parse_args()
