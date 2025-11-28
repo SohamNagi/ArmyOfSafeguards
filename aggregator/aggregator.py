@@ -113,6 +113,21 @@ def aggregate_results(results: Dict[str, Dict[str, Any]], threshold: float = 0.7
     # Calculate overall safety score
     avg_confidence = sum(confidences) / \
         len(confidences) if confidences else 0.0
+    
+    # Sanitize for JSON serialization (handle NaN)
+    import math
+    if math.isnan(avg_confidence):
+        avg_confidence = 0.0
+        
+    for flag in flags:
+        if math.isnan(flag.get('confidence', 0.0)):
+            flag['confidence'] = 0.0
+            
+    for res in results.values():
+        if isinstance(res, dict) and 'confidence' in res:
+            if math.isnan(res['confidence']):
+                res['confidence'] = 0.0
+
     is_safe = len(flags) == 0
 
     return {

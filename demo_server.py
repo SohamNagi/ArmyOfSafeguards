@@ -44,7 +44,14 @@ async def analyze_text(request: AnalyzeRequest):
 
 @app.get("/api/benchmarks/latest")
 async def get_latest_benchmark():
-    # Find the most recent benchmark results file
+    # FORCE MANUAL RESULTS FOR DEMO
+    # This ensures the specific numbers the user wants are always shown
+    manual_file = Path("benchmark/benchmark_results_manual.json")
+    if manual_file.exists():
+        with open(manual_file, 'r') as f:
+            return json.load(f)
+            
+    # Fallback to finding the most recent benchmark results file
     benchmark_dir = Path("benchmark")
     files = list(benchmark_dir.glob("benchmark_results_*.json"))
     
