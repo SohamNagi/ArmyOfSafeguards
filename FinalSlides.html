@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SafeGuard: Collaborative AI Agents</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;700&family=Inter:wght@300;400;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* THEME: CYBER-SECURITY / AI RESEARCH */
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #1e293b;
+            display: grid;
+            gap: 20px;
+            grid-template-columns: 1fr;
+            margin: 0;
+            min-height: 100vh;
+            padding: 20px 0;
+            place-items: center;
+        }
+
+        .slide-container {
+            background-color: #0f172a;
+            border-radius: 12px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+            display: flex;
+            flex-direction: column;
+            height: 720px;
+            justify-content: center;
+            overflow: hidden;
+            padding: 60px;
+            position: relative;
+            width: 1280px;
+            border: 1px solid #1e293b;
+        }
+
+        .slide-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-image: radial-gradient(circle at 10% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 20%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .slide-container>* {
+            position: relative;
+            z-index: 1;
+        }
+
+        h1,
+        h2,
+        h3 {
+            font-family: 'Space Grotesk', sans-serif;
+            color: #f8fafc;
+            margin: 0;
+            letter-spacing: -0.02em;
+        }
+
+        p,
+        li {
+            font-family: 'Inter', sans-serif;
+            color: #cbd5e1;
+            line-height: 1.6;
+            font-size: 20px;
+            margin-bottom: 15px;
+        }
+
+        h1 {
+            font-size: 72px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 20px;
+        }
+
+        .slide-title {
+            font-size: 48px;
+            font-weight: 700;
+            color: #10b981;
+            margin-bottom: 40px;
+            width: 100%;
+            text-align: left;
+            border-left: 5px solid #10b981;
+            padding-left: 20px;
+        }
+
+        h3 {
+            font-size: 28px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 15px;
+        }
+
+        .content-area {
+            display: flex;
+            flex-direction: column;
+            flex-grow: 1;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .two-column {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 50px;
+            width: 100%;
+            align-items: stretch;
+        }
+
+        .tiled-content {
+            display: flex;
+            gap: 30px;
+            justify-content: center;
+            width: 100%;
+            align-items: stretch;
+        }
+
+        .tile {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 30px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
+        }
+
+        .tile .icon {
+            font-size: 48px;
+            color: #3b82f6;
+            margin-bottom: 20px;
+        }
+
+        .two-column.tiled>div {
+            background-color: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 12px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            text-align: center;
+            height: 100%;
+        }
+
+        .quote-layout {
+            text-align: center;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .quote-layout blockquote {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 42px;
+            font-weight: 300;
+            color: #fff;
+            position: relative;
+            margin: 40px 0;
+            line-height: 1.3;
+        }
+
+        .full-bg-image {
+            background-size: cover;
+            background-position: center;
+        }
+
+        .full-bg-image .content-overlay {
+            background: rgba(15, 23, 42, 0.85);
+            padding: 60px;
+            border-radius: 12px;
+            border: 1px solid #10b981;
+            text-align: center;
+            max-width: 800px;
+        }
+
+        .slide-container.bleed-image-layout {
+            padding: 0;
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            align-items: start;
+        }
+
+        .slide-container.bleed-image-layout>.content-container {
+            padding: 60px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            height: 100%;
+        }
+
+        .slide-container.bleed-image-layout>.image-container {
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #000;
+        }
+
+        .slide-container.bleed-image-layout img.bleed-image-side {
+            width: 100%;
+            height: 100%;
+            max-height: 720px;
+            object-fit: contain;
+        }
+
+        /* Chart Styles */
+        .chart-container {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .bar {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .bar .label {
+            width: 200px;
+            text-align: right;
+            font-weight: 600;
+            color: #cbd5e1;
+        }
+
+        .bar .bar-inner {
+            flex-grow: 1;
+            background-color: #334155;
+            height: 40px;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .bar .bar-fill {
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding-right: 15px;
+            color: #0f172a;
+            font-weight: 700;
+            font-size: 18px;
+        }
+
+        .chart-summary {
+            text-align: center;
+            margin-top: 30px;
+            font-style: italic;
+            color: #94a3b8;
+        }
+
+        /* Timeline */
+        .timeline-layout {
+            position: relative;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-top: 40px;
+            width: 100%;
+        }
+
+        .timeline-line {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background-color: #334155;
+            z-index: 0;
+        }
+
+        .timeline-item {
+            position: relative;
+            width: 23%;
+            text-align: center;
+            z-index: 1;
+        }
+
+        .timeline-dot {
+            width: 40px;
+            height: 40px;
+            background-color: #0f172a;
+            border: 4px solid #10b981;
+            border-radius: 50%;
+            margin: 0 auto 20px auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #10b981;
+            font-weight: bold;
+        }
+
+        .section-title-layout {
+            text-align: center;
+            border: 2px solid #3b82f6;
+            padding: 60px;
+            border-radius: 20px;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .image-wrapper {
+            border-radius: 12px;
+            overflow: hidden;
+            height: 400px;
+            border: 1px solid #334155;
+        }
+
+        .image-wrapper img {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        ul {
+            padding-left: 25px;
+        }
+
+        ul li::marker {
+            color: #10b981;
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Slide 1: Title Slide -->
+    <div class="slide-container full-bg-image" id="slide1"
+        style="background-image: linear-gradient(rgba(15, 23, 42, 0.7), rgba(15, 23, 42, 0.9)), url('http://googleusercontent.com/image_collection/image_retrieval/11503870885687434536');">
+        <div class="content-overlay">
+            <h1>SafeGuard</h1>
+            <p style="font-size: 28px; color: #10b981; font-weight: 500;">Collaborative AI Agents for Safer Large
+                Language Models</p>
+            <p style="margin-top: 30px; font-size: 18px; color: #cbd5e1;">Group 47: Nagi, Bondli, Feng, Pang |
+                University of Waterloo</p>
+            <p style="font-size: 16px; margin-top: 10px;">Fall 2025</p>
+        </div>
+    </div>
+
+    <!-- Slide 2: Context & Problem -->
+    <div class="slide-container" id="slide2">
+        <h2 class="slide-title">The Problem Landscape</h2>
+        <div class="content-area">
+            <div class="two-column tiled">
+                <div>
+                    <h3>Ubiquitous but Unsafe</h3>
+                    <p>LLMs are now core to productivity, but they prone to hallucinations, bias, and toxic content.</p>
+                    <p>This creates a massive trust gap. Current "filters" like Llama Guard often fail to catch nuanced
+                        attacks or over-block safe content.</p>
+                </div>
+                <div>
+                    <h3>Adversarial Vulnerability</h3>
+                    <p>Standard models are brittle to "jailbreaks" (e.g., "Ignore previous instructions").</p>
+                    <p>Relying on a single safety model creates a <strong>single point of failure</strong> for these
+                        adversarial attacks.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 3: The Gap -->
+    <div class="slide-container" id="slide3">
+        <h2 class="slide-title">Why Current Solutions Fail</h2>
+        <div class="content-area">
+            <div class="quote-layout">
+                <blockquote>Existing safeguards rely on monolithic models. If one shield breaks, the whole system fails.
+                </blockquote>
+                <p style="font-size: 24px; color: #3b82f6; margin-top: 20px;">We need a system that doesn't just
+                    "filter" but <strong>collaborates</strong>.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 4: Solution Intro -->
+    <div class="slide-container" id="slide4">
+        <div class="content-area">
+            <div class="section-title-layout">
+                <h2>Enter SafeGuard</h2>
+                <hr style="border: 0; height: 2px; background: #3b82f6; width: 100px; margin: 30px auto;">
+                <p style="font-size: 24px;">A Collaborative Multi-Agent Framework</p>
+                <p style="margin-top: 20px;">Moving from single classifiers to specialized teams.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 5: Architecture (Matches Diagram) -->
+    <div class="slide-container bleed-image-layout" id="slide5">
+        <div class="content-container">
+            <h2 class="slide-title">System Architecture</h2>
+            <div class="content-area">
+                <h3>The Workflow</h3>
+                <p>1. <strong>Input:</strong> User prompt enters the system.</p>
+                <p>2. <strong>Parallel Critics:</strong> 4 Agents (Factuality, Toxicity, Sexual Content, Jailbreak)
+                    analyze text simultaneously.</p>
+                <p>3. <strong>Aggregator:</strong> Collects labels & confidence scores.</p>
+                <p>4. <strong>Threshold Logic:</strong> If Confidence > 0.7 &rarr; <strong>REFUSE</strong>. Else &rarr;
+                    <strong>RELEASE</strong>.
+                </p>
+            </div>
+        </div>
+        <div class="image-container">
+            <!-- REPLACE src with your actual diagram file: Screenshot 2025-12-05 at 1.49.37 AM.png -->
+            <img class="bleed-image-side"
+                src="http://googleusercontent.com/image_collection/image_retrieval/17691652127946899219"
+                alt="SafeGuard System Diagram: Input -> Parallel Agents -> Aggregator -> Decision">
+        </div>
+    </div>
+
+    <!-- Slide 6: The Critics -->
+    <div class="slide-container" id="slide6">
+        <h2 class="slide-title">Meet the Critics</h2>
+        <div class="content-area">
+            <div class="tiled-content">
+                <div class="tile">
+                    <div class="icon"><i class="fa-solid fa-scale-balanced"></i></div>
+                    <h3>Factuality</h3>
+                    <p>Detects misinformation using FEVER datasets.</p>
+                </div>
+                <div class="tile">
+                    <div class="icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+                    <h3>Toxicity</h3>
+                    <p>Identifies hate speech and harmful language.</p>
+                </div>
+                <div class="tile">
+                    <div class="icon"><i class="fa-solid fa-hand-holding-hand"></i></div>
+                    <h3>Sexual Content</h3>
+                    <p>Flags explicit material for brand safety.</p>
+                </div>
+                <div class="tile">
+                    <div class="icon"><i class="fa-solid fa-lock"></i></div>
+                    <h3>Jailbreak</h3>
+                    <p>Specialized to detect prompt injection attacks.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 7: Aggregation Logic -->
+    <div class="slide-container" id="slide7">
+        <h2 class="slide-title">The Aggregation Process</h2>
+        <div class="content-area">
+            <div class="timeline-layout">
+                <div class="timeline-line"></div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">1</div>
+                    <h3>Execution</h3>
+                    <p>DeBERTa-v3-small agents run independently.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">2</div>
+                    <h3>Scoring</h3>
+                    <p>Agents return Label + Confidence Score.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">3</div>
+                    <h3>Synthesis</h3>
+                    <p>Aggregator prioritizes high-confidence danger signals.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-dot">4</div>
+                    <h3>Action</h3>
+                    <p><strong>Threshold > 0.7</strong> triggers automatic refusal.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 8: Implementation -->
+    <div class="slide-container" id="slide8">
+        <h2 class="slide-title">Implementation Strategy</h2>
+        <div class="content-area">
+            <div class="two-column">
+                <div>
+                    <h3>Efficient & Scalable</h3>
+                    <ul>
+                        <li><strong>Base Model:</strong> DeBERTa-v3-small (Under 500M params).</li>
+                        <li><strong>Latency:</strong> Lightweight models allow parallel execution without slowing down
+                            the user experience.</li>
+                        <li><strong>Interpretability:</strong> Unlike "black box" safety models, we know exactly
+                            <em>which</em> agent blocked the content (e.g., Jailbreak vs. Toxicity).
+                        </li>
+                    </ul>
+                </div>
+                <div>
+                    <div class="image-wrapper">
+                        <img src="http://googleusercontent.com/image_collection/image_retrieval/16343614064510029914"
+                            alt="Digital dashboard interface">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Slide 9: Evaluation Results (UPDATED STATS) -->
+    <div class="slide-container" id="slide9">
+        <h2 class="slide-title">Benchmarking Performance</h2>
+        <div class="content-area">
+            <h3 style="text-align: center; margin-bottom: 20px;">F1-Score on HarmBench</h3>
+            <div class="chart-container">
+                <div class="bar">
+                    <div class="label">SafeGuard (Ours)</div>
+                    <div class="bar-inner">
+                        <div class="bar-fill" style="width: 87%; background: linear-gradient(90deg, #10b981, #059669);">
+                            87.0%</div>
+                    </div>
+                </div>
+                <div class="bar">
+                    <div class="label">ShieldGemma</div>
+                    <div class="bar-inner">
+                        <div class="bar-fill" style="width: 86%; background: linear-gradient(90deg, #94a3b8, #64748b);">
+                            86.0%</div>
+                    </div>
+                </div>
+                <div class="bar">
+                    <div class="label">Granite Guardian</div>
+                    <div class="bar-inner">
+                        <div class="bar-fill"
+                            style="width: 85.4%; background: linear-gradient(90deg, #3b82f6, #2563eb);">85.4%</div>
+                    </div>
+                </div>
+            </div>
+            <p class="chart-summary">SafeGuard outperforms state-of-the-art baselines on HarmBench F1-score, proving
+                that collaborative agents provide superior coverage.</p>
+        </div>
+    </div>
+
+    <!-- Slide 10: Conclusion (No Q&A) -->
+    <div class="slide-container" id="slide10">
+        <h2 class="slide-title">Conclusion & Future Directions</h2>
+        <div class="content-area">
+            <div class="two-column tiled">
+                <div>
+                    <h3>Project Achievements</h3>
+                    <p><strong>Successful Delivery:</strong> Delivered a working multi-agent prototype within the
+                        4-month Fall 2025 term.</p>
+                    <p><strong>Proven Efficacy:</strong> Demonstrated that specialized collaboration beats monolithic
+                        models (87% F1 vs 85.4%).</p>
+                </div>
+                <div>
+                    <h3>Future Extensions</h3>
+                    <p><strong>Learned Aggregation:</strong> Moving from rule-based thresholds (0.7) to neural routers.
+                    </p>
+                    <p><strong>Broader Scope:</strong> Extending the framework to new domains like Bias Detection or PII
+                        Protection.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+
+</html>
