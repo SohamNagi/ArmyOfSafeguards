@@ -2,12 +2,18 @@
 (Time: \~2:00)
 
 * **Slide 1: Introduction**  
-  * "Good morning, Instructors and TAs. We are Group 47, and we are presenting **SafeGuard**: our collaborative multi-agent system project completed during the Fall 2025 term at the University of Waterloo."  
+  * "Good morning, Instructors and TAs. We are Group 47, and we are presenting **SafeGuard**: our collaborative multi-agent system project completed during the Fall 2025 term at the University of Waterloo."
+  * This project focuses on one of the most important challenges in modern AI systems: how to ensure that Large Language Models behave safely and reliably in real-world settings.
 * **Slide 2: Problem Statement**  
-  * "Our research addresses a fundamental issue: LLMs are now mission-critical, but they remain fundamentally unreliable. They suffer from hallucinations, bias, and, crucially, adversarial vulnerability. Existing safeguards, like simple filters or single models like Llama Guard, struggle to balance safety and utility."  
+  * “As LLMs become embedded into search engines, productivity apps, and customer support systems, they’re increasingly being treated as mission-critical tools. But despite their impressive abilities, they still remain fundamentally unreliable.”
+  * “They hallucinate facts, generate biased or toxic language, and are especially vulnerable to adversarial prompting or jailbreak attacks. These weaknesses make it difficult to trust LLMs in any high-stakes environment.”
+  * “Existing safeguards—like rule-based filters or single-model approaches such as Llama Guard—often over-block harmless content or fail to detect subtle, high-risk prompts. And in many real deployments, whether in finance, healthcare, or public search, even one unsafe output can break user trust and cause significant harm.”  
 * **Slide 3: Why it matters (Why Current Solutions Fail)**  
-  * "This lack of reliability creates a massive trust gap. In any real-world deployment—whether for finance, health, or public search—you cannot afford outputs that are factually incorrect or toxic, especially when under attack."
-  * "The core weakness of prior approaches is that they are **monolithic**. They rely on a single, large safety model or a simple rule-based filter to catch everything. As we noted in our report, this creates a **single point of failure**: if an adversarial prompt, or 'jailbreak,' finds a weakness in that one shield, the whole system fails. We hypothesized that safety must be distributed, not centralized. We need a system that doesn't just filter, but **collaborates**."
+  * “The core weakness of current safety systems is that they are monolithic. They rely on a single safety classifier or rule-based filter to detect every possible category of risk.”
+  * “As we described in our report, this creates a single point of failure: if an adversarial prompt exposes a weakness in that one model, the entire safeguard collapses.”
+  * “Another issue is that these models are usually optimized for a narrow label space—such as toxicity only, or jailbreak detection only. They don’t jointly reason about factuality, groundedness, bias, or context-specific harms, which often overlap in real LLM interactions.”
+  * “So our hypothesis is that safety shouldn’t be centralized in one model — it should be distributed. Instead of relying on one generalist filter, we propose a system of specialized critic agents that collaborate, each analyzing the output from a different perspective.”
+  * “In short, we need a safeguard that doesn’t just filter, but works together.”
   
 **Speaker 2: The Solution & Architecture (Slides 4-6)**  
 (Time: \~2:15)
