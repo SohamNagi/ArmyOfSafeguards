@@ -46,5 +46,7 @@
 
 * **Slide 10: Summary & Next Steps**  
   * "To summarize, this term we built a fully functioning multi-agent safeguard pipeline—from model fine-tuning, to critic specialization, to aggregation—and demonstrated that specialization fundamentally improves robustness. Our experiments showed that no single critic can reliably capture all failure modes, but their coordinated signals form a far more resilient safety layer. This validates our core hypothesis: safety is stronger when distributed."
-  * "While our project concluded with the Fall term, this framework is designed for extension. The most immediate future direction for this research would be replacing our current rule-based aggregation threshold (the fixed 0.7) with **Learned Aggregation strategies**—essentially training a smaller router model to make the final decision. Additionally, the modular structure allows for easy expansion to new critics like PII or Bias Detection. Thank you, for listening!"
+  * "While our project concluded with the Fall term, this framework is designed for extension. The most immediate future direction for this research would be replacing our current rule-based aggregation threshold (the fixed 0.7) with **Learned Aggregation strategies**—essentially training a smaller router model to make the final decision. Additionally, the modular structure allows for easy expansion to new critics like PII or Bias Detection.
+  ** **Slide 11: Thank you**  
+  * Thank you so much for listening and hope you were as intrigued as us!"
  
