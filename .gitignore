@@ -55,3 +55,5 @@ tests/evaluation_*.json
 __pycache__/
 *.pyc
 *.pyo
+
+.proposal.tex
