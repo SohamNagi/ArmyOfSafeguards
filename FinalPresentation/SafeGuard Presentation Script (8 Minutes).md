@@ -28,7 +28,7 @@
 * **Slide 9: Technical Stack**  
   * "To address the constraint of efficiency, every critic agent is built on the lightweight **DeBERTa-v3-small** architecture. With under 500 million parameters, these models are optimized for speed and parallel processing. This is vital for real-time deployment. Furthermore, this modular approach grants us a major advantage in **Interpretability**: unlike a monolithic black box, we know *exactly* which agent (Factuality, Jailbreak, etc.) blocked the response, making debugging transparent."  
 * **Slide 10: Key Results**  
-  * "Finally, the evaluation. We benchmarked SafeGuard against state-of-the-art single-model baselines, including Granite Guardian and ShieldGemma, using multi-domain datasets like HarmBench. The results validated our core hypothesis: SafeGuard achieved an **87.0% F1-score on HarmBench**. Crucially, this demonstrates that specialized collaboration provides superior coverage compared to monolithic models, which often showed higher accuracy on narrow, individual benchmarks but lacked our system's balanced performance profile."
+  * "Finally, the evaluation. We benchmarked SafeGuard against state-of-the-art single-model baselines, including Granite Guardian and ShieldGemma, using multi-domain datasets like HarmBench. The results validated our core hypothesis: SafeGuard achieved an **87.0% F1-score on HarmBench**. Crucially, this demonstrates that specialized collaboration provides comparable coverage compared to monolithic models, which often showed higher accuracy on narrow, individual benchmarks but often introduced a higher inference cost & slower performance."
 
 **Speaker 4: Conclusion & Future Directions (Slides 11-12)**  
 (Time: \~1:15)
