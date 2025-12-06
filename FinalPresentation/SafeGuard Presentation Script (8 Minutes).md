@@ -9,7 +9,7 @@
   * "This lack of reliability creates a massive trust gap. In any real-world deployment—whether for finance, health, or public search—you cannot afford outputs that are factually incorrect or toxic, especially when under attack."
   * "The core weakness of prior approaches is that they are **monolithic**. They rely on a single, large safety model or a simple rule-based filter to catch everything. As we noted in our report, this creates a **single point of failure**: if an adversarial prompt, or 'jailbreak,' finds a weakness in that one shield, the whole system fails. We hypothesized that safety must be distributed, not centralized. We need a system that doesn't just filter, but **collaborates**."
   
-**Speaker 2: The Solution & Architecture (Slides 5-7)**  
+**Speaker 2: The Solution & Architecture (Slides 4-6)**  
 (Time: \~2:15)
 
 * **Slide 4: Solution Introduction**  
@@ -19,7 +19,7 @@
 * **Slide 6: Agent Specialization**  
   * "To ensure maximum coverage across diverse failure modes, we defined four specialized agents: **Factuality**, trained on datasets like FEVER; **Toxicity** to handle hate speech; **Sexual Content** for policy compliance; and critically, a dedicated **Jailbreak** agent to detect sophisticated prompt injection attacks. By separating these concerns, we ensure that a failure in one dimension does not compromise the others."
 
-**Speaker 3: Implementation & Results (Slides 8-10)**  
+**Speaker 3: Implementation & Results (Slides 7-9)**  
 (Time: \~2:30)
 
 * **Slide 7: Decision Logic**  
@@ -29,7 +29,7 @@
 * **Slide 9: Key Results**  
   * "Finally, the evaluation. We benchmarked SafeGuard against state-of-the-art single-model baselines, including Granite Guardian and ShieldGemma, using multi-domain datasets like HarmBench. The results validated our core hypothesis: SafeGuard achieved an **87.0% F1-score on HarmBench**. Crucially, this demonstrates that specialized collaboration provides comparable coverage compared to monolithic models, which often showed higher accuracy on narrow, individual benchmarks but often introduced a higher inference cost & slower performance."
 
-**Speaker 4: Conclusion & Future Directions (Slides 11-12)**  
+**Speaker 4: Conclusion & Future Directions (Slides 10)**  
 (Time: \~1:15)
 
 * **Slide 10: Summary & Next Steps**  
