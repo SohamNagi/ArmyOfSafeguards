@@ -36,7 +36,7 @@
   * "This modular approach grants us a major advantage in **Interpretability**: unlike a monolithic black box, we know *exactly* which agent—whether Factuality, Toxicity, Sexual Content, or Jailbreak—blocked the response, making debugging transparent and enabling more targeted improvements."  
 * **Slide 9: Key Results**  
   * "We benchmarked SafeGuard against leading baselines — Granite Guardian and ShieldGemma — across three benchmarks: JailBreak Bench, HarmBench, and WildGuardMix."
-  * "On HarmBench, SafeGuard achieved an 87.0% F1-score, outperforming ShieldGemma at 86% and Granite Guardian at 100% given a smaple size of 1000, ran over 10,000 different examples."
+  * "On HarmBench, SafeGuard achieved an F1-score of 87.0%, slightly higher than ShieldGemma’s 86%, though below Granite Guardian’s perfect 100%. These results were obtained from a sample size of 1,000, evaluated across more than 10,000 examples."
   * "While Granite Guardian scored higher on JailBreak and WildGuardMix, SafeGuard showed a balanced performance profile across diverse risks and almost compared to those SOTA models."
 
 
