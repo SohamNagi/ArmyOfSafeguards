@@ -17,7 +17,7 @@
 * **Slide 5: The Workflow**  
   * "Here is the blueprint of our system. The LLM response is simultaneously routed to four distinct **Parallel Critic Agents**. Each agent independently assesses the risk, providing a label and a confidence score. This parallel nature is key to maintaining low latency. Their outputs are then sent to a central **Aggregator Module** which synthesizes these signals. The final decision is determined by a simple threshold: if the collective danger confidence is greater than **0.7**, the response is refused; otherwise, it is released."  
 * **Slide 6: Agent Specialization**  
-  * "To ensure maximum coverage across diverse failure modes, we defined four specialized agents: **Factuality**, trained on datasets like FEVER; **Toxicity** to handle hate speech; **Sexual Content** for policy compliance; and critically, a dedicated **Jailbreak** agent to detect sophisticated prompt injection attacks. By separating these concerns, we ensure that a failure in one dimension does not compromise the others."
+  * "To ensure maximum coverage across diverse failure modes, we defined four specialized agents: **Factuality**, trained on datasets like FEVER (Fact Extraction and VERification); **Toxicity** to handle hate speech; **Sexual Content** for policy compliance; and critically, a dedicated **Jailbreak** agent to detect sophisticated prompt injection attacks. By separating these concerns, we ensure that a failure in one dimension does not compromise the others."
 
 **Speaker 3: Implementation & Results (Slides 7-9)**  
 (Time: \~2:30)
