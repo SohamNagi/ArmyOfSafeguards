@@ -27,20 +27,20 @@
 
 **Speaker 3: Implementation & Results (Slides 7-9)**  
 (Time: \~2:30)
-
 * **Slide 7: Decision Logic**  
   * "The decision-making process is summarized here. After the **Execution** and **Scoring** phases, the Aggregator performs **Synthesis**. This is where we account for the signal heterogeneity. For example, if a user attempts a clever jailbreak, the Jailbreak agent might flag it with 95% confidence, while the Toxicity agent might return a low confidence score because the language itself is neutral. The Aggregator detects and prioritizes the high-confidence danger signal from the specialized agent, triggering an action."  
-  * "Our evaluation methodology assessed SafeGuard at two levels: first, the performance of each individual safeguard module on their respective benchmark datasets—including FEVER for factuality, ToxiGen for toxicity, CardiffNLP for sexual content, and JailbreakBench for jailbreak detection. Second, we evaluated the full integrated system using multi-domain benchmarks including WildGuardMix, HarmBench, and JailbreakBench to understand how effectively the aggregator integrates signals from all safeguards."  
+  * "Our evaluation methodology assessed SafeGuard at two levels: first, we evaluated each individual safeguard module on their respective benchmark datasets—FEVER for factuality, ToxiGen for toxicity, CardiffNLP for sexual content, and JailbreakBench for jailbreak detection. Second, we evaluated the full integrated system using multi-domain benchmarks to understand how effectively the aggregator integrates signals from all safeguards."  
 * **Slide 8: Technical Stack**  
-  * "To address the constraint of efficiency, every critic agent is built on the lightweight **DeBERTa-v3-small** architecture. With under 500 million parameters, these models are optimized for speed and parallel processing. This is vital for real-time deployment."  
-  * "All safeguard modules were developed in Python using PyTorch and Hugging Face Transformers. Each critic agent was fine-tuned using consistent hyperparameters across all safeguards: training for three epochs, with a batch size of 16, and early stopping based on validation loss. These settings ensured efficient fine-tuning while maintaining comparability across critic agents."  
-  * "Furthermore, this modular approach grants us a major advantage in **Interpretability**: unlike a monolithic black box, we know *exactly* which agent—whether Factuality, Toxicity, Sexual Content, or Jailbreak—blocked the response, making debugging transparent and enabling more targeted improvements."  
+  * "Every critic agent is built on the lightweight **DeBERTa-v3-small** architecture with under 500 million parameters, optimized for speed and parallel processing. This is vital for real-time deployment."  
+  * "All modules were developed using PyTorch and Hugging Face Transformers. Each critic agent was fine-tuned using consistent hyperparameters across all safeguards: training for three epochs, with a batch size of 16, and early stopping based on validation loss. These settings ensured efficient fine-tuning while maintaining comparability across critic agents."  
+  * "This modular approach grants us a major advantage in **Interpretability**: unlike a monolithic black box, we know *exactly* which agent—whether Factuality, Toxicity, Sexual Content, or Jailbreak—blocked the response, making debugging transparent and enabling more targeted improvements."  
 * **Slide 9: Key Results**  
-  * "Finally, the evaluation. We benchmarked SafeGuard against state-of-the-art single-model baselines, including Granite Guardian and ShieldGemma, using three comprehensive benchmarks: JailBreak Bench, HarmBench, and WildGuardMix."  
-  * "The results validated our core hypothesis. SafeGuard achieved an **87.0% F1-score on HarmBench**, outperforming ShieldGemma at 86% and Granite Guardian at 85.4%. Across all benchmarks, SafeGuard demonstrated competitive performance: 62% F1-score on JailBreak Bench and 55% on WildGuardMix."  
-  * "While Granite Guardian achieved higher accuracy on JailBreak Bench and WildGuardMix, SafeGuard provides a more **balanced performance profile** across different types of safety risks, which aligns with our design goal of comprehensive coverage across multiple failure modes. This balanced approach is crucial because real-world deployments face diverse threats, not just one category."  
-  * "Additionally, SafeGuard maintains efficiency through lightweight critic models, making it suitable for real-time deployment while still achieving competitive safety detection performance. These results demonstrate that collaboration among specialized lightweight critic models can provide effective safety detection while maintaining interpretability and efficiency, addressing key limitations of single-model safeguard approaches."
+  * "We benchmarked SafeGuard against leading baselines — Granite Guardian and ShieldGemma — across three benchmarks: JailBreak Bench, HarmBench, and WildGuardMix."
+  * "On HarmBench, SafeGuard achieved an 87.0% F1-score, outperforming ShieldGemma at 86% and Granite Guardian at 85.4%."
+  * "While Granite Guardian scored higher on JailBreak and WildGuardMix, SafeGuard showed a balanced performance profile across diverse risks."
 
+
+    
 **Speaker 4: Conclusion & Future Directions (Slides 10)**  
 (Time: \~1:15)
 
